@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clokwerk = "0.4.0"
 dotenvy = "0.15.7"
+home = "0.5.11"
 regex = "1.11.1"
