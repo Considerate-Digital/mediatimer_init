@@ -1,4 +1,5 @@
 use std::{
+    sync::{Arc, Mutex, LazyLock},
     io,
     thread,
     time::Duration,
@@ -18,19 +19,19 @@ use clokwerk::{
 
 use regex::Regex;
 
-#[derive(Debug)]
+#[derive(Debug,Clone, Copy)]
 enum ProcType {
     Media,
     Browser,
     Executable,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Autoloop {
     Yes,
     No
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Weekday {
     Monday(Vec<(String, String)>),
     Tuesday(Vec<(String, String)>),
@@ -105,13 +106,24 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule)),
     }
 }
-use std::sync::{LazyLock, Mutex};
 static mut RUNNING_TASK: LazyLock<Mutex<Vec<Child>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-fn run_task(proc_type: Proctype, auto_loop: Autoloop, file: &PathBuf) {
-    match proc_type {
+fn run_task(task: Arc<Mutex<Task>>) {
+    println!("{:?}", task);
+    let looper = match task.lock().unwrap().auto_loop {
+        Autoloop::Yes => Autoloop::Yes,
+        Autoloop::No => Autoloop::No
+    };
+    let file = task.lock().unwrap().file.clone();
+    let proc_type = match task.lock().unwrap().proc_type {
+        ProcType::Media => ProcType::Media,
+        ProcType::Browser => ProcType::Browser,
+        ProcType::Executable => ProcType::Executable
+    };
+    println!("{:?}", task);
+    match task.lock().unwrap().proc_type {
         ProcType::Media => {
-            let loopy = match auto_loop {
+            let loopy = match looper {
                 Autoloop::Yes => "-L",
                 Autoloop::No => "",
             };
@@ -127,7 +139,7 @@ fn run_task(proc_type: Proctype, auto_loop: Autoloop, file: &PathBuf) {
         },
         ProcType::Browser => {
             let output = Command::new("firefox")
-                .arg(file)
+                .arg(task.lock().unwrap().file.clone())
                 .arg("&")
                 .arg("xdotool")
                 .arg("search")
@@ -143,7 +155,7 @@ fn run_task(proc_type: Proctype, auto_loop: Autoloop, file: &PathBuf) {
         },
         ProcType::Executable => {
             let mut command = String::from("./");
-            if let Some(file_str) = file.to_str() {
+            if let Some(file_str) = task.lock().unwrap().file.to_str() {
                 command.push_str(file_str);
                 let output = Command::new(&command);
             }
@@ -280,6 +292,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     timings.push(monday);
 
+    let timings_clone = timings.clone();
+
     // convert the proc type to enum
     let proc_type = match proc_type.to_lowercase().as_str() {
         "media" => ProcType::Media,
@@ -288,53 +302,62 @@ fn main() -> Result<(), Box<dyn Error>> {
         &_ => ProcType::Media
     };
 
-    let task: Task = Task::new(proc_type, auto_loop, timings, file);
-   // check if there are any day variables set 
-   let Weekday::Monday(monday_vec) = &task.timings[0] else { todo!() };
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
+
     
-    let mut control_scheduler = Scheduler::new();
     // set up scheduler
     let mut scheduler = Scheduler::new();
+    
+    let monday_vec = 0;
 
-    let thread_handle = scheduler.watch_thread(Duration::from_millis(1000));
+   if let Weekday::Monday(monday_vec) = &timings_clone[0] {
+       if monday_vec.len() > 1 {
+           // use the full scheduler
+           println!("using the full scheduler");
+           for day in timings_clone.iter() {
+               let day_name = match day {
+                    Weekday::Monday(_) => Interval::Monday,
+                    Weekday::Tuesday(_) => Interval::Tuesday,
+                    Weekday::Wednesday(_) => Interval::Wednesday,
+                    Weekday::Thursday(_) => Interval::Thursday,
+                    Weekday::Friday(_) => Interval::Friday, 
+                    Weekday::Saturday(_) => Interval::Saturday, 
+                    Weekday::Sunday(_) => Interval::Sunday 
+          
+               };
+               let timing_vec = match day {
+                    Weekday::Monday(t) => t,
+                    Weekday::Tuesday(t) => t,
+                    Weekday::Wednesday(t) => t,
+                    Weekday::Thursday(t) => t,
+                    Weekday::Friday(t) => t, 
+                    Weekday::Saturday(t) => t, 
+                    Weekday::Sunday(t) => t 
+               };
 
-   if monday_vec.len() > 1 {
-       // use the full scheduler
-       println!("using the full scheduler");
-       for day in task.timings.iter() {
-           let day_name = match day {
-                Weekday::Monday(_) => Interval::Monday,
-                Weekday::Tuesday(_) => Interval::Tuesday,
-                Weekday::Wednesday(_) => Interval::Wednesday,
-                Weekday::Thursday(_) => Interval::Thursday,
-                Weekday::Friday(_) => Interval::Friday, 
-                Weekday::Saturday(_) => Interval::Saturday, 
-                Weekday::Sunday(_) => Interval::Sunday 
-      
-           };
-           let timing_vec = match day {
-                Weekday::Monday(t) => t,
-                Weekday::Tuesday(t) => t,
-                Weekday::Wednesday(t) => t,
-                Weekday::Thursday(t) => t,
-                Weekday::Friday(t) => t, 
-                Weekday::Saturday(t) => t, 
-                Weekday::Sunday(t) => t 
-           };
-            for timing in timing_vec.iter() {
-               scheduler.every(day_name)
-                   .at(&timing.0)
-                   .run(|| run_task());
+                for timing in timing_vec.iter() {
+                   let task_clone = Arc::clone(&task);
+                   println!("{:?}", timing);
+                   scheduler.every(day_name)
+                       .at(&timing.0)
+                       .run(move || run_task(task_clone.clone()));
 
-                scheduler.every(day_name)
-                    .at(&timing.1)
-                    .run(|| stop_task());
-            }
+                    scheduler.every(day_name)
+                        .at(&timing.1)
+                        .run(|| stop_task());
+                }
+           }
+           loop {
+               scheduler.run_pending();
+               thread::sleep(Duration::from_millis(10));
+           }
+       } else {
+           // run the task now
+           println!("running the task now");
+           let task_clone = Arc::clone(&task); 
+           let task_aut = run_task(task_clone);
+           println!("{:?}", task_aut);
        }
-   } else {
-       // run the task now
-       println!("running the task now");
-       run_task(task);
    }
 
     Ok(())
