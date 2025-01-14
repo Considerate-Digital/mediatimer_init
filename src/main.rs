@@ -381,56 +381,52 @@ fn main() -> Result<(), Box<dyn Error>> {
     // set up scheduler
     let mut scheduler = Scheduler::new();
     
-    let monday_vec = 0;
+    if schedule == true {
+       // use the full scheduler
+       println!("using the full scheduler");
+       for day in timings_clone.iter() {
+           let day_name = match day {
+                Weekday::Monday(_) => Interval::Monday,
+                Weekday::Tuesday(_) => Interval::Tuesday,
+                Weekday::Wednesday(_) => Interval::Wednesday,
+                Weekday::Thursday(_) => Interval::Thursday,
+                Weekday::Friday(_) => Interval::Friday, 
+                Weekday::Saturday(_) => Interval::Saturday, 
+                Weekday::Sunday(_) => Interval::Sunday 
+      
+           };
+           let timing_vec = match day {
+                Weekday::Monday(t) => t,
+                Weekday::Tuesday(t) => t,
+                Weekday::Wednesday(t) => t,
+                Weekday::Thursday(t) => t,
+                Weekday::Friday(t) => t, 
+                Weekday::Saturday(t) => t, 
+                Weekday::Sunday(t) => t 
+           };
 
-   if let Weekday::Monday(monday_vec) = &timings_clone[0] {
-       if monday_vec.len() > 1 {
-           // use the full scheduler
-           println!("using the full scheduler");
-           for day in timings_clone.iter() {
-               let day_name = match day {
-                    Weekday::Monday(_) => Interval::Monday,
-                    Weekday::Tuesday(_) => Interval::Tuesday,
-                    Weekday::Wednesday(_) => Interval::Wednesday,
-                    Weekday::Thursday(_) => Interval::Thursday,
-                    Weekday::Friday(_) => Interval::Friday, 
-                    Weekday::Saturday(_) => Interval::Saturday, 
-                    Weekday::Sunday(_) => Interval::Sunday 
-          
-               };
-               let timing_vec = match day {
-                    Weekday::Monday(t) => t,
-                    Weekday::Tuesday(t) => t,
-                    Weekday::Wednesday(t) => t,
-                    Weekday::Thursday(t) => t,
-                    Weekday::Friday(t) => t, 
-                    Weekday::Saturday(t) => t, 
-                    Weekday::Sunday(t) => t 
-               };
+            for timing in timing_vec.iter() {
+               let task_clone = Arc::clone(&task);
+               println!("{:?}", timing);
+               scheduler.every(day_name)
+                   .at(&timing.0)
+                   .run(move || run_task(task_clone.clone()));
 
-                for timing in timing_vec.iter() {
-                   let task_clone = Arc::clone(&task);
-                   println!("{:?}", timing);
-                   scheduler.every(day_name)
-                       .at(&timing.0)
-                       .run(move || run_task(task_clone.clone()));
-
-                    scheduler.every(day_name)
-                        .at(&timing.1)
-                        .run(|| stop_task());
-                }
-           }
-           loop {
-               scheduler.run_pending();
-               thread::sleep(Duration::from_millis(10));
-           }
-       } else {
-           // run the task now
-           println!("running the task now");
-           let task_clone = Arc::clone(&task); 
-           let task_aut = run_task(task_clone);
-           println!("{:?}", task_aut);
+                scheduler.every(day_name)
+                    .at(&timing.1)
+                    .run(|| stop_task());
+            }
        }
+       loop {
+           scheduler.run_pending();
+           thread::sleep(Duration::from_millis(10));
+       }
+   } else {
+       // run the task now
+       println!("running the task now");
+       let task_clone = Arc::clone(&task); 
+       let task_aut = run_task(task_clone);
+       println!("{:?}", task_aut);
    }
 
     Ok(())
