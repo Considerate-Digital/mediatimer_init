@@ -234,12 +234,15 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
 static mut RUNNING_TASK: LazyLock<Mutex<Vec<Child>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 fn run_task(task: Arc<Mutex<Task>>) {
-    println!("{:?}", task);
+    println!("{:?}", task.lock().unwrap());
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
     };
-    let file = task.lock().unwrap().file.clone();
+
+    let file_binding = task.lock().unwrap().file.clone();
+    let file = file_binding.to_str().unwrap();
+    println!("file: {}", file);
     let proc_type = match task.lock().unwrap().proc_type {
         ProcType::Media => ProcType::Media,
         ProcType::Browser => ProcType::Browser,
@@ -248,23 +251,30 @@ fn run_task(task: Arc<Mutex<Task>>) {
     println!("{:?}", task);
     match task.lock().unwrap().proc_type {
         ProcType::Media => {
+            println!("matched media");
             let loopy = match looper {
                 Autoloop::Yes => "-L",
                 Autoloop::No => "",
             };
-            let child = Command::new("cvlc")
+            println!("loopy: {}", loopy);
+            let child = Command::new("vlc-wrapper")
                 .arg("-f")
                 .arg(loopy)
                 .arg("--no-video-title-show")
+                .arg("--video-on-top")
+                .arg("--no-metadata-network-access")
+                .arg("--no-qt-privacy-ask")
                 .arg(file)
                 .spawn().expect("no child");
+
+            println!("{:?}", child);
             unsafe {
                 RUNNING_TASK.lock().unwrap().push(child);
             }
         },
         ProcType::Browser => {
             let child = Command::new("chromium")
-                .arg(task.lock().unwrap().file.clone())
+                .arg(file)
                 .arg("--start-fullscreen")
                 .arg("--start-maximized")
                 .spawn().expect("no child");
@@ -380,7 +390,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
-    
+    println!("scheduler: {}", schedule);    
     if schedule == true {
        // use the full scheduler
        println!("using the full scheduler");
@@ -427,6 +437,7 @@ fn main() -> Result<(), Box<dyn Error>> {
        let task_clone = Arc::clone(&task); 
        let task_aut = run_task(task_clone);
        println!("{:?}", task_aut);
+       loop {}
    }
 
     Ok(())
