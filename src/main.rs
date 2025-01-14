@@ -54,16 +54,18 @@ struct Task {
     proc_type: ProcType,
     auto_loop: Autoloop,
     timings: Timings,
-    file: PathBuf
+    file: PathBuf,
+    user: String
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, user: String) -> Self {
         Task {
             proc_type,
             auto_loop,
             timings,
-            file
+            file,
+            user
         }
     }
     fn set_loop(&mut self, auto_loop: Autoloop) {
@@ -234,15 +236,14 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
 static mut RUNNING_TASK: LazyLock<Mutex<Vec<Child>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 fn run_task(task: Arc<Mutex<Task>>) {
-    println!("{:?}", task.lock().unwrap());
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
     };
-
+    let user = task.lock().unwrap().user.clone();
     let file_binding = task.lock().unwrap().file.clone();
     let file = file_binding.to_str().unwrap();
-    println!("file: {}", file);
+    println!("user: {}", user);
     let proc_type = match task.lock().unwrap().proc_type {
         ProcType::Media => ProcType::Media,
         ProcType::Browser => ProcType::Browser,
@@ -274,27 +275,25 @@ fn run_task(task: Arc<Mutex<Task>>) {
         },
         ProcType::Browser => {
             let child = Command::new("chromium")
-                .arg(file)
+                //.arg("--user-data-dir=/tmp/chromium/")
                 .arg("--start-fullscreen")
                 .arg("--start-maximized")
+                .arg(file)
                 .spawn().expect("no child");
+
             unsafe {
                 RUNNING_TASK.lock().unwrap().push(child);
             }
 
         },
         ProcType::Executable => {
-            let mut command = String::from(".");
-            if let Some(file_str) = task.lock().unwrap().file.to_str() {
-                command.push_str(file_str);
-
-                let child = Command::new(&command)
+                let child = Command::new("sh")
+                    .arg(file)
                     .spawn().expect("no child");
 
                 unsafe {
                     RUNNING_TASK.lock().unwrap().push(child);
                 }
-            }
 
         }
     }
@@ -338,6 +337,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
     let mut schedule = false;
+    let mut user = String::from("medialoop");
     let mut timings: Vec<Weekday> = Vec::with_capacity(7);
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
     let mut tuesday: Weekday = Weekday::Tuesday(Vec::with_capacity(2));
@@ -368,9 +368,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             "ML_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()))?,
             "ML_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()))?,
             "ML_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()))?,
+            //"USER" => user = String::from(value.as_str()),
             _ => {}
         }
     }
+    /*
+    let add_user_command = Command::new("useradd")
+        .arg("-r")
+        // need a home directory for snap or container installed chromium
+        .arg("-m")
+        .arg("medialoop")
+        .output()
+        .expect("created medialoop user");
+    */
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
     
@@ -385,7 +395,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         &_ => ProcType::Media
     };
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, user)));
 
     
     // set up scheduler
