@@ -2,5 +2,5 @@
 ## Dependencies
 - mount
 - umount
-- vlc (cvlc)
+- ffmpeg
 - chromium

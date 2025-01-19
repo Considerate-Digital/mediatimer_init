@@ -136,6 +136,9 @@ fn find_mount_drives() -> Result<(), Box<dyn Error>> {
                 .collect::<Vec<_>>();
                 if drive_info[1] == "1" { 
                     // unmount the drive before going further
+                    // have the thread sleep for one second as puppy umount sometimes fails
+                    let one_second = Duration::from_millis(1000); 
+                    thread::sleep(one_second);
                     let unmount_com = Command::new("umount")
                         .arg("/dev/".to_owned() + drive_info[0])
                         .output()
@@ -254,27 +257,35 @@ fn run_task(task: Arc<Mutex<Task>>) {
         ProcType::Media => {
             println!("matched media");
             let loopy = match looper {
-                Autoloop::Yes => "-L",
-                Autoloop::No => "",
-            };
-            println!("loopy: {}", loopy);
-            let child = Command::new("vlc-wrapper")
-                .arg("-f")
-                .arg(loopy)
-                .arg("--no-video-title-show")
-                .arg("--video-on-top")
-                .arg("--no-metadata-network-access")
-                .arg("--no-qt-privacy-ask")
-                .arg(file)
-                .spawn().expect("no child");
+                Autoloop::Yes => {
+                    let mut child = Command::new("ffplay")
+                        .arg("-fs")
+                        .arg("-loop")
+                        .arg("-1")
+                        .arg(file)
+                        .spawn().expect("no child");
 
-            println!("{:?}", child);
-            unsafe {
-                RUNNING_TASK.lock().unwrap().push(child);
-            }
+                    println!("{:?}", child);
+                    unsafe {
+                        RUNNING_TASK.lock().unwrap().push(child);
+                    }
+
+                }
+                Autoloop::No => {
+                    let mut child = Command::new("ffplay")
+                        .arg("-fs")
+                        .arg(file)
+                        .spawn().expect("no child");
+
+                    println!("{:?}", child);
+                    unsafe {
+                        RUNNING_TASK.lock().unwrap().push(child);
+                    }
+                }
+            };
         },
         ProcType::Browser => {
-            let child = Command::new("chromium")
+            let mut child = Command::new("chromium")
                 //.arg("--user-data-dir=/tmp/chromium/")
                 .arg("--start-fullscreen")
                 .arg("--start-maximized")
@@ -287,7 +298,7 @@ fn run_task(task: Arc<Mutex<Task>>) {
 
         },
         ProcType::Executable => {
-                let child = Command::new("sh")
+                let mut child = Command::new("sh")
                     .arg(file)
                     .spawn().expect("no child");
 
@@ -328,7 +339,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     env_dir_path.push("medialoop_config/vars");
 
-    if let Err(e) = dotenvy::from_path(env_dir_path.as_path()) {
+    if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
+        eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
         eprintln!("Please run medialoop, to setup this program");
         process::exit(1)
     }
@@ -383,7 +395,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     */
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
-    
+   
+    println!("Timings: {:?}", timings);
 
     let timings_clone = timings.clone();
 
