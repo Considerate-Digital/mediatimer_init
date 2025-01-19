@@ -245,7 +245,7 @@ fn run_task(task: Arc<Mutex<Task>>) {
     };
     let user = task.lock().unwrap().user.clone();
     let file_binding = task.lock().unwrap().file.clone();
-    let file = file_binding.to_str().unwrap();
+    let file = String::from(file_binding.to_str().unwrap());
     println!("user: {}", user);
     let proc_type = match task.lock().unwrap().proc_type {
         ProcType::Media => ProcType::Media,
@@ -258,53 +258,61 @@ fn run_task(task: Arc<Mutex<Task>>) {
             println!("matched media");
             let loopy = match looper {
                 Autoloop::Yes => {
-                    let mut child = Command::new("ffplay")
-                        .arg("-fs")
-                        .arg("-loop")
-                        .arg("-1")
-                        .arg(file)
-                        .spawn().expect("no child");
+                    thread::spawn(move || {
+                        let child = Command::new("ffplay")
+                            .arg("-fs")
+                            .arg("-loop")
+                            .arg("-1")
+                            .arg(&file)
+                            .spawn().expect("no child");
 
-                    println!("{:?}", child);
-                    unsafe {
-                        RUNNING_TASK.lock().unwrap().push(child);
-                    }
+                        println!("{:?}", child);
+                        unsafe {
+                            RUNNING_TASK.lock().unwrap().push(child);
+                        }
+                    });
 
                 }
                 Autoloop::No => {
-                    let mut child = Command::new("ffplay")
-                        .arg("-fs")
-                        .arg(file)
-                        .spawn().expect("no child");
+                    thread::spawn(move || {
+                        let child = Command::new("ffplay")
+                            .arg("-fs")
+                            .arg(&file)
+                            .spawn().expect("no child");
 
-                    println!("{:?}", child);
-                    unsafe {
-                        RUNNING_TASK.lock().unwrap().push(child);
-                    }
+                        println!("{:?}", child);
+                        unsafe {
+                            RUNNING_TASK.lock().unwrap().push(child);
+                        }
+                    });
                 }
             };
         },
         ProcType::Browser => {
-            let mut child = Command::new("chromium")
-                //.arg("--user-data-dir=/tmp/chromium/")
-                .arg("--start-fullscreen")
-                .arg("--start-maximized")
-                .arg(file)
-                .spawn().expect("no child");
-
-            unsafe {
-                RUNNING_TASK.lock().unwrap().push(child);
-            }
-
-        },
-        ProcType::Executable => {
-                let mut child = Command::new("sh")
-                    .arg(file)
+            thread::spawn(move || {
+                let child = Command::new("chromium")
+                    //.arg("--user-data-dir=/tmp/chromium/")
+                    .arg("--start-fullscreen")
+                    .arg("--start-maximized")
+                    .arg(&file)
                     .spawn().expect("no child");
 
                 unsafe {
                     RUNNING_TASK.lock().unwrap().push(child);
                 }
+            });
+
+        },
+        ProcType::Executable => {
+            thread::spawn(move || {
+                let child = Command::new("sh")
+                    .arg(&file)
+                    .spawn().expect("no child");
+
+                unsafe {
+                    RUNNING_TASK.lock().unwrap().push(child);
+                }
+            });
 
         }
     }
