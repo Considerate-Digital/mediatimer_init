@@ -79,6 +79,21 @@ impl Task {
     }
 }
 
+#[derive(Debug)]
+struct RunningTask {
+    child: process::Child,
+    background: bool
+}
+
+impl RunningTask {
+    fn new(child: Child, background: bool) -> RunningTask {
+        RunningTask {
+            child,
+            background
+        }
+    }
+}
+
 enum Usb {
     SDA1,
     SDA2,
@@ -236,9 +251,10 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
 }
-static mut RUNNING_TASK: LazyLock<Mutex<Vec<Child>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static mut RUNNING_TASK: LazyLock<Mutex<Vec<RunningTask>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 fn run_task(task: Arc<Mutex<Task>>) {
+    let _stopped_task = stop_task();
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -246,13 +262,11 @@ fn run_task(task: Arc<Mutex<Task>>) {
     let user = task.lock().unwrap().user.clone();
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
-    println!("user: {}", user);
     let proc_type = match task.lock().unwrap().proc_type {
         ProcType::Media => ProcType::Media,
         ProcType::Browser => ProcType::Browser,
         ProcType::Executable => ProcType::Executable
     };
-    println!("{:?}", task);
     match task.lock().unwrap().proc_type {
         ProcType::Media => {
             println!("matched media");
@@ -266,9 +280,9 @@ fn run_task(task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        println!("{:?}", child);
+                        let running_task = RunningTask::new(child, false);
                         unsafe {
-                            RUNNING_TASK.lock().unwrap().push(child);
+                            RUNNING_TASK.lock().unwrap().push(running_task);
                         }
                     });
 
@@ -281,8 +295,9 @@ fn run_task(task: Arc<Mutex<Task>>) {
                             .spawn().expect("no child");
 
                         println!("{:?}", child);
+                        let running_task = RunningTask::new(child, false);
                         unsafe {
-                            RUNNING_TASK.lock().unwrap().push(child);
+                            RUNNING_TASK.lock().unwrap().push(running_task);
                         }
                     });
                 }
@@ -297,8 +312,9 @@ fn run_task(task: Arc<Mutex<Task>>) {
                     .arg(&file)
                     .spawn().expect("no child");
 
+                        let running_task = RunningTask::new(child, false);
                 unsafe {
-                    RUNNING_TASK.lock().unwrap().push(child);
+                    RUNNING_TASK.lock().unwrap().push(running_task);
                 }
             });
 
@@ -309,8 +325,9 @@ fn run_task(task: Arc<Mutex<Task>>) {
                     .arg(&file)
                     .spawn().expect("no child");
 
+                        let running_task = RunningTask::new(child, false);
                 unsafe {
-                    RUNNING_TASK.lock().unwrap().push(child);
+                    RUNNING_TASK.lock().unwrap().push(running_task);
                 }
             });
 
@@ -318,26 +335,59 @@ fn run_task(task: Arc<Mutex<Task>>) {
     }
 }
 
+fn make_background() {
+    thread::spawn(move || {
+        let _child = Command::new("ffmpeg")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("color=black:s=1920x1080:r=10")
+            .arg("-t")
+            .arg("1")
+            .arg("/tmp/black.mp4")
+            .spawn().expect("no child");
+    });
+}
+
+fn run_background() {
+    thread::spawn(move || {
+        let child = Command::new("ffplay")
+            .arg("-fs")
+            .arg("-loop")
+            .arg("-1")
+            .arg("/tmp/black.mp4")
+            .spawn().expect("no child");
+
+        let running_task = RunningTask::new(child, true);
+        unsafe {
+            RUNNING_TASK.lock().unwrap().push(running_task);
+        }
+    });
+}
+
 fn stop_task() {
     unsafe {
         let mut task = RUNNING_TASK.lock().unwrap();
-        task[0].kill().expect("command could not be killed");
+        task[0].child.kill().expect("command could not be killed");
 
         // only one task is run at a time, so it is safe to pop.
         RUNNING_TASK.lock().unwrap().pop();
+
+        if task[0].background == false {
+            // run background
+            run_background();
+        }
+
+
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-
-
     // check which usbs are mounted
 
     let _mount_drives = find_mount_drives()?;
- 
 
     // use this dir for testing
-    //
     let mut env_dir_path = PathBuf::new();
 
     if let Some(dir) = home::home_dir() {
@@ -352,6 +402,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Please run medialoop, to setup this program");
         process::exit(1)
     }
+
+    // create then start the background
+    let _create_background = make_background();
+    let _run_background = run_background();
    
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
