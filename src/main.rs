@@ -255,6 +255,7 @@ static mut RUNNING_TASK: LazyLock<Mutex<Vec<RunningTask>>> = LazyLock::new(|| Mu
 
 fn run_task(task: Arc<Mutex<Task>>) {
     let _stopped_task = stop_task();
+    println!("Stopped previous task and trying to run new task");
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -336,17 +337,17 @@ fn run_task(task: Arc<Mutex<Task>>) {
 }
 
 fn make_background() {
-    thread::spawn(move || {
-        let _child = Command::new("ffmpeg")
-            .arg("-f")
-            .arg("lavfi")
-            .arg("-i")
-            .arg("color=black:s=1920x1080:r=10")
-            .arg("-t")
-            .arg("1")
-            .arg("/tmp/black.mp4")
-            .spawn().expect("no child");
-    });
+    let _made_background = Command::new("ffmpeg")
+        .arg("-f")
+        .arg("lavfi")
+        .arg("-y")
+        .arg("-i")
+        .arg("color=black:s=1920x1080:r=10")
+        .arg("-t")
+        .arg("1")
+        .arg("/tmp/black.mp4")
+        .output()
+        .expect("Could not create black video");
 }
 
 fn run_background() {
@@ -356,7 +357,8 @@ fn run_background() {
             .arg("-loop")
             .arg("-1")
             .arg("/tmp/black.mp4")
-            .spawn().expect("no child");
+            .spawn()
+            .expect("no child");
 
         let running_task = RunningTask::new(child, true);
         unsafe {
@@ -367,18 +369,14 @@ fn run_background() {
 
 fn stop_task() {
     unsafe {
-        let mut task = RUNNING_TASK.lock().unwrap();
-        task[0].child.kill().expect("command could not be killed");
+        let mut task = RUNNING_TASK.lock().unwrap().pop().unwrap();
+        task.child.kill().expect("command could not be killed");
 
         // only one task is run at a time, so it is safe to pop.
-        RUNNING_TASK.lock().unwrap().pop();
-
-        if task[0].background == false {
+        if task.background == false {
             // run background
             run_background();
         }
-
-
     }
 }
 
