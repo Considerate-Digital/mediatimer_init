@@ -373,13 +373,15 @@ fn run_background() {
 
 fn stop_task() {
     unsafe {
-        let mut task = RUNNING_TASK.lock().unwrap().pop().unwrap();
-        task.child.kill().expect("command could not be killed");
+        if RUNNING_TASK.lock().unwrap().len() > 0 {
+            let mut task = RUNNING_TASK.lock().unwrap().pop().unwrap();
+            task.child.kill().expect("command could not be killed");
 
-        // only one task is run at a time, so it is safe to pop.
-        if task.background == false {
-            // run background
-            run_background();
+            // only one task is run at a time, so it is safe to pop.
+            if task.background == false {
+                // run background
+                run_background();
+            }
         }
     }
 }
@@ -407,7 +409,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // create then start the background
     let _create_background = make_background();
-    let _run_background = run_background();
    
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
@@ -480,6 +481,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("scheduler: {}", schedule);    
     if schedule == true {
        // use the full scheduler
+       let _run_background = run_background();
        println!("using the full scheduler");
        for day in timings_clone.iter() {
            let day_name = match day {
