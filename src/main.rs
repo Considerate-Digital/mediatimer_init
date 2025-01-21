@@ -308,6 +308,10 @@ fn run_task(task: Arc<Mutex<Task>>) {
             thread::spawn(move || {
                 let child = Command::new("chromium")
                     //.arg("--user-data-dir=/tmp/chromium/")
+                    //.arg("--disable-session-crashed-bubble")
+                    .arg("--disable-infobars")
+                    //.arg("--kiosk")
+                    .arg("--incognito")
                     .arg("--start-fullscreen")
                     .arg("--start-maximized")
                     .arg(&file)
