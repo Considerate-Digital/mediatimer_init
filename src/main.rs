@@ -1,24 +1,29 @@
 use std::{
-    sync::{Arc, Mutex, LazyLock},
-    io,
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
-    path::{Path, PathBuf},
+    path::{PathBuf},
     env,
     error::Error,
     process,
     process::{
         Command,
         Child
-    }
+    },
+    ops::Deref,
 };
+
 use clokwerk::{
     Scheduler,
     Interval,
     Job
 };
 
-use regex::Regex;
+mod mount;
+use crate::mount::find_mount_drives;
+
+mod background;
+//use crate::background;
 
 #[derive(Debug,Clone, Copy)]
 enum ProcType {
@@ -55,17 +60,15 @@ struct Task {
     auto_loop: Autoloop,
     timings: Timings,
     file: PathBuf,
-    user: String
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, user: String) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf) -> Self {
         Task {
             proc_type,
             auto_loop,
             timings,
-            file,
-            user
+            file
         }
     }
     fn set_loop(&mut self, auto_loop: Autoloop) {
@@ -94,140 +97,6 @@ impl RunningTask {
     }
 }
 
-enum Usb {
-    SDA1,
-    SDA2,
-    SDA3,
-    SDA4,
-    SDB1,
-    SDB2,
-    SDB3,
-    SDB4,
-    SDC1,
-    SDC2,
-    SDC3,
-    SDC4,
-    UNKNOWN
-}
-
-impl Usb {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Usb::SDA1 => "sda1", 
-            Usb::SDA2 => "sda2", 
-            Usb::SDA3 => "sda3", 
-            Usb::SDA4 => "sda4",
-            Usb::SDB1 => "sdb1", 
-            Usb::SDB2 => "sdb2", 
-            Usb::SDB3 => "sdb3",
-            Usb::SDB4 => "sdb4",
-            Usb::SDC1 => "sdc1",
-            Usb::SDC2 => "sdc2",
-            Usb::SDC3 => "sdc3",
-            Usb::SDC4 => "sdc4",
-            Usb::UNKNOWN => ""
-        }
-    }
-}
-
-
-fn find_mount_drives() -> Result<(), Box<dyn Error>> {
-    println!("Finding and mounting drives");
-    // check with usbs are available 
-    let all_drives = Command::new("lsblk")
-        .arg("-l")
-        .arg("-o")
-        .arg("NAME,HOTPLUG")
-        .output()
-        .expect("some drives");
-    
-    let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
-    
-    for line in all_drives_string.lines() {
-        let re = Regex::new(r"sd[a,b,c][1-4]").unwrap();
-        if re.is_match(line) {
-            let drive_info = line.split(' ')
-                .filter(|d| *d != "" )
-                .collect::<Vec<_>>();
-                if drive_info[1] == "1" { 
-                    // unmount the drive before going further
-                    // have the thread sleep for one second as puppy umount sometimes fails
-                    let one_second = Duration::from_millis(1000); 
-                    thread::sleep(one_second);
-                    let unmount_com = Command::new("umount")
-                        .arg("/dev/".to_owned() + drive_info[0])
-                        .output()
-                        .expect("Failed to unmount usb drive");
-
-                    println!("{:?}", unmount_com);
-                    let drive = match drive_info[0] {
-                        "sda1" => Usb::SDA1,
-                        "sda2" => Usb::SDA2,
-                        "sda3" => Usb::SDA3,
-                        "sda4" => Usb::SDA4,
-                        "sdb1" => Usb::SDB1,
-                        "sdb2" => Usb::SDB2,
-                        "sdb3" => Usb::SDB3,
-                        "sdb4" => Usb::SDB4,
-                        "sdc1" => Usb::SDC1,
-                        "sdc2" => Usb::SDC2,
-                        "sdc3" => Usb::SDC3,
-                        "sdc4" => Usb::SDC4,
-                        &_ => Usb::UNKNOWN
-
-                    };
-                    mount_usb(drive)?;
-                }
-        }
-    }
-    Ok(())
-}
-
-fn mount_usb(drive: Usb) -> Result<(), Box<dyn Error>> {
-
-    let mnt_dir: String = match drive {
-        Usb::SDA1 => format!("usb_{}", Usb::SDA1.as_str()),
-        Usb::SDA2 => format!("usb_{}", Usb::SDA2.as_str()),
-        Usb::SDA3 => format!("usb_{}", Usb::SDA3.as_str()),
-        Usb::SDA4 => format!("usb_{}", Usb::SDA4.as_str()),
-        Usb::SDB1 => format!("usb_{}", Usb::SDB1.as_str()),
-        Usb::SDB2 => format!("usb_{}", Usb::SDB2.as_str()),
-        Usb::SDB3 => format!("usb_{}", Usb::SDB3.as_str()),
-        Usb::SDB4 => format!("usb_{}", Usb::SDB4.as_str()),
-        Usb::SDC1 => format!("usb_{}", Usb::SDC1.as_str()),
-        Usb::SDC2 => format!("usb_{}", Usb::SDC2.as_str()),
-        Usb::SDC3 => format!("usb_{}", Usb::SDC3.as_str()),
-        Usb::SDC4 => format!("usb_{}", Usb::SDC4.as_str()),
-        Usb::UNKNOWN => "".to_string()
-
-    };
-    let drive_name = match drive {
-        Usb::SDA1 => Usb::SDA1.as_str(), 
-        Usb::SDA2 => Usb::SDA2.as_str(), 
-        Usb::SDA3 => Usb::SDA3.as_str(), 
-        Usb::SDA4 => Usb::SDA4.as_str(),
-        Usb::SDB1 => Usb::SDB1.as_str(), 
-        Usb::SDB2 => Usb::SDB2.as_str(), 
-        Usb::SDB3 => Usb::SDB3.as_str(),
-        Usb::SDB4 => Usb::SDB4.as_str(),
-        Usb::SDC1 => Usb::SDC1.as_str(),
-        Usb::SDC2 => Usb::SDC2.as_str(),
-        Usb::SDC3 => Usb::SDC3.as_str(),
-        Usb::SDC4 => Usb::SDC4.as_str(),
-        Usb::UNKNOWN => ""
-    };
-    let mount_drive = Command::new("mount")
-            .arg("/dev/".to_owned() + drive_name)
-            // tell mount to make the target dir
-            .arg("-o")
-            .arg("rw,x-mount.mkdir")
-            .arg("/mnt/".to_owned() + &mnt_dir)
-            .output()
-            .expect("failed to mount");
-
-    Ok(())
-}
-
 
 fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
     let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.to_string()).collect(); 
@@ -251,27 +120,21 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
 }
-static mut RUNNING_TASK: LazyLock<Mutex<Vec<RunningTask>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-fn run_task(task: Arc<Mutex<Task>>) {
-    let _stopped_task = stop_task();
+fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
+    let task_list_clone = Arc::clone(&task_list);
+    let _stopped_task = stop_task(task_list.clone());
     println!("Stopped previous task and trying to run new task");
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
     };
-    let user = task.lock().unwrap().user.clone();
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
-    let proc_type = match task.lock().unwrap().proc_type {
-        ProcType::Media => ProcType::Media,
-        ProcType::Browser => ProcType::Browser,
-        ProcType::Executable => ProcType::Executable
-    };
     match task.lock().unwrap().proc_type {
         ProcType::Media => {
             println!("matched media");
-            let loopy = match looper {
+            match looper {
                 Autoloop::Yes => {
                     thread::spawn(move || {
                         let child = Command::new("ffplay")
@@ -282,9 +145,7 @@ fn run_task(task: Arc<Mutex<Task>>) {
                             .spawn().expect("no child");
 
                         let running_task = RunningTask::new(child, false);
-                        unsafe {
-                            RUNNING_TASK.lock().unwrap().push(running_task);
-                        }
+                        task_list_clone.lock().unwrap().push(running_task);
                     });
 
                 }
@@ -297,9 +158,7 @@ fn run_task(task: Arc<Mutex<Task>>) {
 
                         println!("{:?}", child);
                         let running_task = RunningTask::new(child, false);
-                        unsafe {
-                            RUNNING_TASK.lock().unwrap().push(running_task);
-                        }
+                        task_list_clone.lock().unwrap().push(running_task);
                     });
                 }
             };
@@ -318,9 +177,7 @@ fn run_task(task: Arc<Mutex<Task>>) {
                     .spawn().expect("no child");
 
                         let running_task = RunningTask::new(child, false);
-                unsafe {
-                    RUNNING_TASK.lock().unwrap().push(running_task);
-                }
+                    task_list_clone.lock().unwrap().push(running_task);
             });
 
         },
@@ -331,62 +188,45 @@ fn run_task(task: Arc<Mutex<Task>>) {
                     .spawn().expect("no child");
 
                         let running_task = RunningTask::new(child, false);
-                unsafe {
-                    RUNNING_TASK.lock().unwrap().push(running_task);
-                }
+                    task_list_clone.lock().unwrap().push(running_task);
             });
 
         }
     }
 }
 
-fn make_background() {
-    let _made_background = Command::new("ffmpeg")
-        .arg("-f")
-        .arg("lavfi")
-        .arg("-y")
-        .arg("-i")
-        .arg("color=black:s=1920x1080:r=10")
-        .arg("-t")
-        .arg("1")
-        .arg("/tmp/black.mp4")
-        .output()
-        .expect("Could not create black video");
-}
 
-fn run_background() {
-    thread::spawn(move || {
-        let child = Command::new("ffplay")
-            .arg("-fs")
-            .arg("-loop")
-            .arg("-1")
-            .arg("/tmp/black.mp4")
-            .spawn()
-            .expect("no child");
-
-        let running_task = RunningTask::new(child, true);
-        unsafe {
-            RUNNING_TASK.lock().unwrap().push(running_task);
-        }
-    });
-}
-
-fn stop_task() {
-    unsafe {
-        let mut task = RUNNING_TASK.lock().unwrap().pop().unwrap();
+fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
+        let mut task = task_list.lock().unwrap().pop().unwrap();
         task.child.kill().expect("command could not be killed");
 
         // only one task is run at a time, so it is safe to pop.
         if task.background == false {
             // run background
-            run_background();
+            background::run(Arc::clone(&task_list));
+        }
+}
+
+struct App {
+    task_list: Arc<Mutex<Vec<RunningTask>>>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        App {
+            task_list: Arc::new(Mutex::new(Vec::new()))
         }
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // check which usbs are mounted
 
+
+fn main() -> Result<(), Box<dyn Error>> {
+    
+    // initialise the app
+    let app = App::default();
+
+    // check which usbs are mounted
     let _mount_drives = find_mount_drives()?;
 
     // use this dir for testing
@@ -401,19 +241,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
-        eprintln!("Please run medialoop, to setup this program");
+        eprintln!("Please run medialoop, to setup this program: {}", e);
         process::exit(1)
     }
 
     // create then start the background
-    let _create_background = make_background();
-    let _run_background = run_background();
+    let _create_background = background::make();
+    let _run_background = background::run(Arc::clone(&app.task_list));
    
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
     let mut schedule = false;
-    let mut user = String::from("medialoop");
     let mut timings: Vec<Weekday> = Vec::with_capacity(7);
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
     let mut tuesday: Weekday = Weekday::Tuesday(Vec::with_capacity(2));
@@ -448,15 +287,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-    /*
-    let add_user_command = Command::new("useradd")
-        .arg("-r")
-        // need a home directory for snap or container installed chromium
-        .arg("-m")
-        .arg("medialoop")
-        .output()
-        .expect("created medialoop user");
-    */
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
    
@@ -472,12 +302,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         &_ => ProcType::Media
     };
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, user)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
 
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
-    println!("scheduler: {}", schedule);    
     if schedule == true {
        // use the full scheduler
        println!("using the full scheduler");
@@ -504,14 +333,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             for timing in timing_vec.iter() {
                let task_clone = Arc::clone(&task);
+               let task_list_clone = Arc::clone(&app.task_list);
+               let task_list_clone_2 = Arc::clone(&app.task_list);
                println!("{:?}", timing);
                scheduler.every(day_name)
                    .at(&timing.0)
-                   .run(move || run_task(task_clone.clone()));
+                   .run(move || run_task(task_list_clone.clone(), task_clone.clone()));
 
                 scheduler.every(day_name)
                     .at(&timing.1)
-                    .run(|| stop_task());
+                    .run(move || stop_task(task_list_clone_2.clone()));
             }
        }
        loop {
@@ -522,10 +353,8 @@ fn main() -> Result<(), Box<dyn Error>> {
        // run the task now
        println!("running the task now");
        let task_clone = Arc::clone(&task); 
-       let task_aut = run_task(task_clone);
-       println!("{:?}", task_aut);
+       let task_list_clone = Arc::clone(&app.task_list);
+       let _task_aut = run_task(task_list_clone, task_clone);
        loop {}
    }
-
-    Ok(())
 }
