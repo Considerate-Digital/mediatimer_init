@@ -25,6 +25,9 @@ use crate::mount::find_mount_drives;
 mod background;
 //use crate::background;
 
+mod error;
+use crate::error::error as display_error;
+
 #[derive(Debug,Clone, Copy)]
 enum ProcType {
     Media,
@@ -225,6 +228,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     
     // initialise the app
     let app = App::default();
+
+    // test error
+    display_error(); 
 
     // check which usbs are mounted
     let _mount_drives = find_mount_drives()?;
