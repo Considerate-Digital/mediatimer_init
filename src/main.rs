@@ -105,25 +105,27 @@ impl RunningTask {
 
 fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
     let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
+    if &value != "" {
+        let string_vec_test = string_vec.clone();
 
-    // check the schedule format matches 00:00 or 00:00:00
-    // move these check to the "to weekday" function
-    let re = Regex::new(r"(^\d{2}:\d{2}-\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}$)").unwrap();
-    // check the times split correctly
-    let parsed_count = string_vec.len();  
-    let string_of_times = string_vec.iter().map(|s| s.to_string()).collect::<String>();
-    let mut re_count = 0;
-    for time in string_vec {
-        if re.is_match(&time) == true {
-            println!("Adding to count");
-            re_count += 1;
+        // check the schedule format matches 00:00 or 00:00:00
+        // move these check to the "to weekday" function
+        let re = Regex::new(r"(^\d{2}:\d{2}-\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}$)").unwrap();
+        // check the times split correctly
+        let parsed_count = string_vec_test.len();  
+        let string_of_times = string_vec_test.iter().map(|s| s.to_string()).collect::<String>();
+        let mut re_count = 0;
+        for time in string_vec_test.iter() {
+            if re.is_match(&time) == true {
+                re_count += 1;
+            }
         }
-    }
-    if parsed_count != re_count {
-        println!("{}, {}", parsed_count, re_count);
-        // timings do not match
-        display_error_with_message("Schedule incorrectly formatted!");
-        process::exit(1);
+        if parsed_count != re_count {
+            println!("{}, {}", parsed_count, re_count);
+            // timings do not match
+            display_error_with_message("Schedule incorrectly formatted!");
+            process::exit(1);
+        }
     }
 
     let mut day_schedule = Vec::new();
@@ -224,13 +226,15 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 
 
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
-        let mut task = task_list.lock().unwrap().pop().unwrap();
-        task.child.kill().expect("command could not be killed");
+        if task_list.lock().unwrap().len() > 0 {
+            let mut task = task_list.lock().unwrap().pop().unwrap();
+            task.child.kill().expect("command could not be killed");
 
-        // only one task is run at a time, so it is safe to pop.
-        if task.background == false {
-            // run background
-            background::run(Arc::clone(&task_list));
+            // only one task is run at a time, so it is safe to pop.
+            if task.background == false {
+                // run background
+                background::run(Arc::clone(&task_list));
+            }
         }
 }
 
@@ -306,15 +310,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             "ML_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()))?,
             "ML_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()))?,
             "ML_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()))?,
-            //"USER" => user = String::from(value.as_str()),
             _ => {}
         }
     }
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
    
-    //println!("Timings: {:?}", timings);
-
     let timings_clone = timings.clone();
 
     // convert the proc type to enum
