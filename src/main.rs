@@ -23,7 +23,6 @@ mod mount;
 use crate::mount::find_mount_drives;
 
 mod background;
-//use crate::background;
 
 mod error;
 use crate::error::error as display_error;
@@ -229,9 +228,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // initialise the app
     let app = App::default();
 
-    // test error
-    display_error(); 
-
     // check which usbs are mounted
     let _mount_drives = find_mount_drives()?;
 
@@ -309,7 +305,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
-
+    
+    // check task elements here
+    // does the file exist? 
+    // if the schedule is being used, is the schedule formatted properly?
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
