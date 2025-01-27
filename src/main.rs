@@ -19,6 +19,8 @@ use clokwerk::{
     Job
 };
 
+use regex::Regex;
+
 mod mount;
 use crate::mount::find_mount_drives;
 
@@ -26,6 +28,7 @@ mod background;
 
 mod error;
 use crate::error::error as display_error;
+use crate::error::error_with_message as display_error_with_message;
 
 #[derive(Debug,Clone, Copy)]
 enum ProcType {
@@ -247,10 +250,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         process::exit(1)
     }
 
-    // create then start the background
-    let _create_background = background::make();
-    let _run_background = background::run(Arc::clone(&app.task_list));
-   
+       
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
@@ -304,11 +304,50 @@ fn main() -> Result<(), Box<dyn Error>> {
         &_ => ProcType::Media
     };
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
-    
     // check task elements here
     // does the file exist? 
     // if the schedule is being used, is the schedule formatted properly?
+    if false == file.as_path().exists() {
+        display_error_with_message("Could not find file!");    
+    }
+    
+    // check the schedule format matches 00:00 or 00:00:00
+    // move these check to the "to weekday" function
+    let re = Regex::new(r"(\d{2}:\d{2}-\d{2}:\d{2}|\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2})").unwrap();
+
+    // check the times split correctly
+    for day in &timings {
+        let day_schedule = match day {
+            Weekday::Monday(x) => x, 
+            Weekday::Tuesday(x) => x,
+            Weekday::Wednesday(x) => x,
+            Weekday::Thursday(x) => x,
+            Weekday::Friday(x) => x,
+            Weekday::Saturday(x) => x,
+            Weekday::Sunday(x) => x,
+        };
+        let mut str_of_timings = String::with_capacity(20);
+        for (start, end) in day_schedule {
+            str_of_timings.push_str(&start);
+            str_of_timings.push_str(&end);
+        }
+        println!("{}", str_of_timings);
+        let no_of_parsed_times = day_schedule.len();  
+        let re_found_times = re.find_iter(&str_of_timings).map(|x| x.as_str()).collect::<Vec<&str>>();
+        if no_of_parsed_times != re_found_times.len() {
+            println!("{}, {}", no_of_parsed_times, re_found_times.len());
+            // timings do not match
+            //display_error_with_message("Schedule incorrectly formatted!");
+            process::exit(1);
+        }
+    }
+
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
+    
+    // create then start the background after the task is created
+    let _create_background = background::make();
+    let _run_background = background::run(Arc::clone(&app.task_list));
+
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
