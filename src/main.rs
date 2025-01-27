@@ -104,7 +104,29 @@ impl RunningTask {
 
 
 fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
-    let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.to_string()).collect(); 
+    let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
+
+    // check the schedule format matches 00:00 or 00:00:00
+    // move these check to the "to weekday" function
+    let re = Regex::new(r"(^\d{2}:\d{2}-\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}$)").unwrap();
+    // check the times split correctly
+    let parsed_count = string_vec.len();  
+    let string_of_times = string_vec.iter().map(|s| s.to_string()).collect::<String>();
+    let mut re_count = 0;
+    for time in string_vec {
+        if re.is_match(&time) == true {
+            println!("Adding to count");
+            re_count += 1;
+        }
+    }
+    if parsed_count != re_count {
+        println!("{}, {}", parsed_count, re_count);
+        // timings do not match
+        display_error_with_message("Schedule incorrectly formatted!");
+        process::exit(1);
+    }
+    process::exit(0);
+
     let mut day_schedule = Vec::new();
     for time in string_vec.iter() {
         let start_end = time.as_str()
@@ -124,6 +146,8 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Saturday(_) => Ok(Weekday::Saturday(day_schedule)),
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
+
+
 }
 
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
@@ -138,7 +162,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let file = String::from(file_binding.to_str().unwrap());
     match task.lock().unwrap().proc_type {
         ProcType::Media => {
-            println!("matched media");
             match looper {
                 Autoloop::Yes => {
                     thread::spawn(move || {
@@ -292,7 +315,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
    
-    println!("Timings: {:?}", timings);
+    //println!("Timings: {:?}", timings);
 
     let timings_clone = timings.clone();
 
@@ -303,43 +326,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         "executable" => ProcType::Executable,
         &_ => ProcType::Media
     };
-
+    process::exit(0);
     // check task elements here
     // does the file exist? 
-    // if the schedule is being used, is the schedule formatted properly?
     if false == file.as_path().exists() {
         display_error_with_message("Could not find file!");    
-    }
-    
-    // check the schedule format matches 00:00 or 00:00:00
-    // move these check to the "to weekday" function
-    let re = Regex::new(r"(\d{2}:\d{2}-\d{2}:\d{2}|\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2})").unwrap();
-
-    // check the times split correctly
-    for day in &timings {
-        let day_schedule = match day {
-            Weekday::Monday(x) => x, 
-            Weekday::Tuesday(x) => x,
-            Weekday::Wednesday(x) => x,
-            Weekday::Thursday(x) => x,
-            Weekday::Friday(x) => x,
-            Weekday::Saturday(x) => x,
-            Weekday::Sunday(x) => x,
-        };
-        let mut str_of_timings = String::with_capacity(20);
-        for (start, end) in day_schedule {
-            str_of_timings.push_str(&start);
-            str_of_timings.push_str(&end);
-        }
-        println!("{}", str_of_timings);
-        let no_of_parsed_times = day_schedule.len();  
-        let re_found_times = re.find_iter(&str_of_timings).map(|x| x.as_str()).collect::<Vec<&str>>();
-        if no_of_parsed_times != re_found_times.len() {
-            println!("{}, {}", no_of_parsed_times, re_found_times.len());
-            // timings do not match
-            //display_error_with_message("Schedule incorrectly formatted!");
-            process::exit(1);
-        }
     }
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
@@ -352,8 +343,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // set up scheduler
     let mut scheduler = Scheduler::new();
     if schedule == true {
-       // use the full scheduler
-       println!("using the full scheduler");
+       // use the full scheduler and run the task at certain times
        for day in timings_clone.iter() {
            let day_name = match day {
                 Weekday::Monday(_) => Interval::Monday,
@@ -395,7 +385,6 @@ fn main() -> Result<(), Box<dyn Error>> {
        }
    } else {
        // run the task now
-       println!("running the task now");
        let task_clone = Arc::clone(&task); 
        let task_list_clone = Arc::clone(&app.task_list);
        let _task_aut = run_task(task_list_clone, task_clone);

@@ -45,7 +45,6 @@ impl Usb {
 
 
 pub fn find_mount_drives() -> Result<(), Box<dyn Error>> {
-    println!("Finding and mounting drives");
     // check with usbs are available 
     let all_drives = Command::new("lsblk")
         .arg("-l")
