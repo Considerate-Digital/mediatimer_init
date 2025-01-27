@@ -125,7 +125,6 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
         display_error_with_message("Schedule incorrectly formatted!");
         process::exit(1);
     }
-    process::exit(0);
 
     let mut day_schedule = Vec::new();
     for time in string_vec.iter() {
