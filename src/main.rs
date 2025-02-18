@@ -20,9 +20,10 @@ use clokwerk::{
 };
 
 use regex::Regex;
+use whoami;
 
 mod mount;
-use crate::mount::find_mount_drives;
+use crate::mount::identify_mounted_drives;
 
 mod background;
 
@@ -258,17 +259,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = App::default();
 
     // check which usbs are mounted
-    let _mount_drives = find_mount_drives()?;
+    // this will mount all of the drives automatically using udisksctl
+    let _mount_drives = identify_mounted_drives();
 
-    // use this dir for testing
-    let mut env_dir_path = PathBuf::new();
-
-    if let Some(dir) = home::home_dir() {
-        env_dir_path.push(dir);
-    } else {
-        env_dir_path.push("/home/");
-    }
-    env_dir_path.push("medialoop_config/vars");
+    // This is hard coded, as the user will always be named "fun"
+    let username = whoami::username();
+    let env_dir_path: PathBuf =["/home/", &username, "medialoop_config/vars"].iter().collect();
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
