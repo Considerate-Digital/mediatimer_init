@@ -1,6 +1,2 @@
-
-## Dependencies
-- mount
-- umount
-- ffmpeg
-- chromium
+# Medialoop_init
+Please see the `medialoop` project for details.
