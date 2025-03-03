@@ -43,15 +43,56 @@ enum Autoloop {
     Yes,
     No
 }
-#[derive(Debug, Clone)]
-enum Weekday {
-    Monday(Vec<(String, String)>),
-    Tuesday(Vec<(String, String)>),
-    Wednesday(Vec<(String, String)>),
-    Thursday(Vec<(String, String)>),
-    Friday(Vec<(String, String)>),
-    Saturday(Vec<(String, String)>),
-    Sunday(Vec<(String, String)>),
+
+type Schedule = Vec<(String, String)>;
+type Timings = Vec<Weekday>;
+
+#[derive(Display, Debug, Clone)]
+pub enum Weekday {
+    Monday(Schedule),
+    Tuesday(Schedule),
+    Wednesday(Schedule),
+    Thursday(Schedule),
+    Friday(Schedule),
+    Saturday(Schedule),
+    Sunday(Schedule),
+}
+
+impl Weekday {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Weekday::Monday(_) => "Monday",
+            Weekday::Tuesday(_) => "Tuesday",
+            Weekday::Wednesday(_) => "Wednesday",
+            Weekday::Thursday(_) => "Thursday",
+            Weekday::Friday(_) => "Friday",
+            Weekday::Saturday(_) => "Saturday",
+            Weekday::Sunday(_) => "Sunday"
+        }
+    }
+    fn to_string(&self) -> String {
+        match self {
+            Weekday::Monday(_) => String::from("Monday"),
+            Weekday::Tuesday(_) => String::from("Tuesday"),
+            Weekday::Wednesday(_) => String::from("Wednesday"),
+            Weekday::Thursday(_) => String::from("Thursday"),
+            Weekday::Friday(_) => String::from("Friday"),
+            Weekday::Saturday(_) => String::from("Saturday"),
+            Weekday::Sunday(_) => String::from("Sunday")
+        }
+    }
+
+    fn timings(&self) -> Schedule {
+        match self {
+            Weekday::Monday(schedule) => schedule.clone(),
+            Weekday::Tuesday(schedule) => schedule.clone(),
+            Weekday::Wednesday(schedule) => schedule.clone(),
+            Weekday::Thursday(schedule) => schedule.clone(),
+            Weekday::Friday(schedule) => schedule.clone(),
+            Weekday::Saturday(schedule) => schedule.clone(),
+            Weekday::Sunday(schedule) => schedule.clone()
+        }
+    }
 }
 
 type Timings = Vec<Weekday>;
@@ -105,12 +146,14 @@ impl RunningTask {
 
 
 fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
-    let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
+    let mut day_schedule = Vec::new();
     if &value != "" {
+        let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
         let string_vec_test = string_vec.clone();
 
         // check the schedule format matches 00:00 or 00:00:00
         // move these check to the "to weekday" function
+        // TODO change to updated regex
         let re = Regex::new(r"(^\d{2}:\d{2}-\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}$)").unwrap();
         // check the times split correctly
         let parsed_count = string_vec_test.len();  
@@ -127,17 +170,16 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
             display_error_with_message("Schedule incorrectly formatted!");
             process::exit(1);
         }
-    }
 
-    let mut day_schedule = Vec::new();
-    for time in string_vec.iter() {
-        let start_end = time.as_str()
-            .split("-")
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
-        let start = start_end[0].clone();
-        let end = start_end[1].clone();
-        day_schedule.push((start, end));
+        for time in string_vec.iter() {
+            let start_end = time.as_str()
+                .split("-")
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>();
+            let start = start_end[0].clone();
+            let end = start_end[1].clone();
+            day_schedule.push((start, end));
+        }
     }
     match day {
        Weekday::Monday(_) =>  Ok(Weekday::Monday(day_schedule)),
@@ -258,13 +300,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // initialise the app
     let app = App::default();
 
-    // check which usbs are mounted
     // this will mount all of the drives automatically using udisksctl
     let _mount_drives = identify_mounted_drives();
 
-    // This is hard coded, as the user will always be named "fun"
     let username = whoami::username();
-    let env_dir_path: PathBuf =["/home/", &username, "medialoop_config/vars"].iter().collect();
+    let env_dir_path: PathBuf =["/home/", &username, ".medialoop_config/vars"].iter().collect();
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
@@ -275,6 +315,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
+    // TODO should be updated to AdvancedSchedule enum
     let mut schedule = false;
     let mut timings: Vec<Weekday> = Vec::with_capacity(7);
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
@@ -362,9 +403,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             for timing in timing_vec.iter() {
                let task_clone = Arc::clone(&task);
+               let task_clone_2 = Arc::clone(&task);
                let task_list_clone = Arc::clone(&app.task_list);
                let task_list_clone_2 = Arc::clone(&app.task_list);
-               println!("{:?}", timing);
+                // check if day is today 
+               let local = Local::now();
+               let day = format!("{}", local.format("%d"));
+               let is_today = false;  
+               let timing_day = timing_vec.as_str();
+               if day.lowercase() == timing_day.lowercase() {
+                   let start_time =  
+                   // if &timing.0 is less 
+                   if current_time > &timing.0 && current_time < &timing.1 {
+                        run_task(task_list_clone_3.clone(), task_clone_2.clone());
+                   }
+               }
+
                scheduler.every(day_name)
                    .at(&timing.0)
                    .run(move || run_task(task_list_clone.clone(), task_clone.clone()));
