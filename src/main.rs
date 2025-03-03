@@ -12,11 +12,18 @@ use std::{
     },
     ops::Deref,
 };
+use strum::Display;
 
 use clokwerk::{
     Scheduler,
     Interval,
     Job
+};
+
+use chrono::{
+    DateTime,
+    TimeZone,
+    Local
 };
 
 use regex::Regex;
@@ -95,7 +102,6 @@ impl Weekday {
     }
 }
 
-type Timings = Vec<Weekday>;
 
 /// This program runs one task at custom intervals. The task can also be looped.
 /// Commonly this is used for playing media files at certain times.
@@ -308,7 +314,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
-        eprintln!("Please run medialoop, to setup this program: {}", e);
+        display_error_with_message("Could not find config file, please run medialoop to set up this program.");    
         process::exit(1)
     }
 
@@ -400,21 +406,59 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Weekday::Saturday(t) => t, 
                 Weekday::Sunday(t) => t 
            };
-
+           
+           fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
+               let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+               // function must return a date format string
+               if i.len() == 2 {
+                   (i[0], i[1], 0 as u32) 
+                } else {
+                   (i[0], i[1], i[2]) 
+                }
+           }
+        
+           // iterates through each timing for the day
             for timing in timing_vec.iter() {
                let task_clone = Arc::clone(&task);
-               let task_clone_2 = Arc::clone(&task);
                let task_list_clone = Arc::clone(&app.task_list);
                let task_list_clone_2 = Arc::clone(&app.task_list);
+
                 // check if day is today 
                let local = Local::now();
-               let day = format!("{}", local.format("%d"));
-               let is_today = false;  
-               let timing_day = timing_vec.as_str();
-               if day.lowercase() == timing_day.lowercase() {
-                   let start_time =  
+               let day_today = format!("{}", local.format("%A"));
+
+               
+               let timing_day = day.as_str();
+                println!("{},{}", day_today.to_lowercase(), timing_day.to_lowercase());
+               if day_today.to_lowercase() == timing_day.to_lowercase() {
+                   let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
+                   let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+                   let year_num = date_nums[0] as i32;
+                   let month_num = date_nums[1];
+                   let day_num = date_nums[2];
+                   let hour_num = date_nums[3];
+                   let min_num = date_nums[4];
+                   let sec_num = date_nums[5];
+
+                   // TODO error handling
+                   let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
+
+                   let start_time = Local.with_ymd_and_hms(
+                       year_num, month_num, day_num, 
+                       start_hour, start_min, start_sec).unwrap();
+
+                   let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
+
+                   let end_time = Local.with_ymd_and_hms(
+                       year_num, month_num, day_num, 
+                       end_hour, end_min, end_sec).unwrap();
+
+                    let local_timestamp = local.timestamp(); 
                    // if &timing.0 is less 
-                   if current_time > &timing.0 && current_time < &timing.1 {
+                   if local_timestamp > start_time.timestamp() && local_timestamp < end_time.timestamp() {
+
+                        let task_list_clone_3 = Arc::clone(&app.task_list);
+                        let task_clone_2 = Arc::clone(&task);
                         run_task(task_list_clone_3.clone(), task_clone_2.clone());
                    }
                }

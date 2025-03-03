@@ -99,8 +99,8 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw("To reset the program run 'medialoop' in a terminal."),
                 Line::raw(""),
-                Line::raw("Or alternatively edit the medialoop config file at"),
-                Line::raw("/home/your-user-name/medialoop_config/vars"),
+                Line::raw("Or manually edit the medialoop config file at"),
+                Line::raw("/home/your-user-name/.medialoop_config/vars"),
             ];
 
         } else {
@@ -110,8 +110,8 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw("Please run 'medialoop' in a terminal to setup the program."),
                 Line::raw(""),
-                Line::raw("Or alternatively edit the medialoop config file at"),
-                Line::raw("/home/your-user-name/medialoop_config/vars"),
+                Line::raw("Or manually edit the medialoop config file at"),
+                Line::raw("/home/your-user-name/.medialoop_config/vars"),
             ];
         }
 
