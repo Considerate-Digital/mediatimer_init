@@ -171,7 +171,6 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
             }
         }
         if parsed_count != re_count {
-            println!("{}, {}", parsed_count, re_count);
             // timings do not match
             display_error_with_message("Schedule incorrectly formatted!");
             process::exit(1);
@@ -204,7 +203,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
     let _stopped_task = stop_task(task_list_clone_two.clone());
-    println!("Stopped previous task and trying to run new task");
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -235,7 +233,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        println!("{:?}", child);
                         let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
@@ -278,7 +275,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
             let mut task = task_list.lock().unwrap().pop().unwrap();
-            println!("Stopping task: {:?}", task);
             task.child.kill().expect("command could not be killed");
 
             if task.background == false {
@@ -430,7 +426,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                
                let timing_day = day.as_str();
-                println!("{},{}", day_today.to_lowercase(), timing_day.to_lowercase());
                if day_today.to_lowercase() == timing_day.to_lowercase() {
                    let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>().unwrap()).collect::<Vec<u32>>();
