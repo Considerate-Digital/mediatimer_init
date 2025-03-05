@@ -245,7 +245,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     //.arg("--user-data-dir=/tmp/chromium/")
                     //.arg("--disable-session-crashed-bubble")
                     .arg("--disable-infobars")
-                    .arg("--kiosk")
+                    //.arg("--kiosk")
                     .arg("--incognito")
                     .arg("--start-fullscreen")
                     .arg("--start-maximized")
