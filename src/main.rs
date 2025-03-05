@@ -202,7 +202,8 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
 
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
-    let _stopped_task = stop_task(task_list.clone());
+    let task_list_clone_two = Arc::clone(&task_list);
+    let _stopped_task = stop_task(task_list_clone_two.clone());
     println!("Stopped previous task and trying to run new task");
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
@@ -277,9 +278,9 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
             let mut task = task_list.lock().unwrap().pop().unwrap();
+            println!("Stopping task: {:?}", task);
             task.child.kill().expect("command could not be killed");
 
-            // only one task is run at a time, so it is safe to pop.
             if task.background == false {
                 // run background
                 background::run(Arc::clone(&task_list));
@@ -482,5 +483,5 @@ fn main() -> Result<(), Box<dyn Error>> {
        let task_list_clone = Arc::clone(&app.task_list);
        let _task_aut = run_task(task_list_clone, task_clone);
        loop {}
-   }
+  }
 }
