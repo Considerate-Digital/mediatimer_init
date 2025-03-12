@@ -12,7 +12,7 @@ use crate::RunningTask;
 
 pub fn make() {
     let username = whoami::username();
-    let env_dir_path: PathBuf =["/home/", &username, ".medialoop_config/black.mp4"].iter().collect();
+    let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/black.mp4"].iter().collect();
     // TODO error handling
     if !env_dir_path.exists() {
         let path_str = env_dir_path.to_str().unwrap();
@@ -33,7 +33,7 @@ pub fn make() {
 
 pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>) {
     let username = whoami::username();
-    let env_dir_path: PathBuf =["/home/", &username, ".medialoop_config/black.mp4"].iter().collect();
+    let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/black.mp4"].iter().collect();
 
     // TODO error handling
     let path_str = env_dir_path.to_str().unwrap();

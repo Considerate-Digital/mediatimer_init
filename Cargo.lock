@@ -360,7 +360,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "medialoop_init"
+name = "mediatimer_init"
 version = "0.1.0"
 dependencies = [
  "chrono",
