@@ -307,11 +307,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _mount_drives = identify_mounted_drives();
 
     let username = whoami::username();
-    let env_dir_path: PathBuf =["/home/", &username, ".medialoop_config/vars"].iter().collect();
+    let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
-        display_error_with_message("Could not find config file, please run medialoop to set up this program.");    
+        display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
         process::exit(1)
     }
 

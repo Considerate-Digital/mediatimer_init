@@ -1,2 +1,2 @@
 # Medialoop_init
-Please see the `medialoop` project for details.
+Please see the `mediatimer` project for details.

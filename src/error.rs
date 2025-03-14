@@ -97,10 +97,10 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw(&self.message),
                 Line::raw(""),
-                Line::raw("To reset the program run 'medialoop' in a terminal."),
+                Line::raw("To reset the program run 'mediatimer' in a terminal."),
                 Line::raw(""),
-                Line::raw("Or manually edit the medialoop config file at"),
-                Line::raw("/home/your-user-name/.medialoop_config/vars"),
+                Line::raw("Or manually edit the mediatimer config file at"),
+                Line::raw("/home/your-user-name/.mediatimer_config/vars"),
             ];
 
         } else {
@@ -108,10 +108,10 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw("Medialoop could not be started."),
                 Line::raw(""),
-                Line::raw("Please run 'medialoop' in a terminal to setup the program."),
+                Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
                 Line::raw(""),
-                Line::raw("Or manually edit the medialoop config file at"),
-                Line::raw("/home/your-user-name/.medialoop_config/vars"),
+                Line::raw("Or manually edit the mediatimer config file at"),
+                Line::raw("/home/your-user-name/.mediatimer_config/vars"),
             ];
         }
 
