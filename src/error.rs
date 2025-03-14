@@ -93,7 +93,7 @@ impl Widget for &ErrorTerm {
         if self.message != "" {
             lines = vec![
                 Line::raw(""),
-                Line::raw("Medialoop could not be started."),
+                Line::raw("Media Timer could not be started."),
                 Line::raw(""),
                 Line::raw(&self.message),
                 Line::raw(""),
@@ -106,11 +106,11 @@ impl Widget for &ErrorTerm {
         } else {
             lines = vec![
                 Line::raw(""),
-                Line::raw("Medialoop could not be started."),
+                Line::raw("Media Timer could not be started."),
                 Line::raw(""),
                 Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
                 Line::raw(""),
-                Line::raw("Or manually edit the mediatimer config file at"),
+                Line::raw("Or manually edit the Media Timer config file at"),
                 Line::raw("/home/your-user-name/.mediatimer_config/vars"),
             ];
         }
