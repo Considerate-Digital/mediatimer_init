@@ -17,6 +17,9 @@ pub fn make() {
     if !env_dir_path.exists() {
         let path_str = env_dir_path.to_str().unwrap();
         let _made_background = Command::new("ffmpeg")
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
             .arg("-f")
             .arg("lavfi")
             .arg("-y")
@@ -39,6 +42,10 @@ pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>) {
     let path_str = env_dir_path.to_str().unwrap();
 
     let child = Command::new("ffplay")
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+
         .arg("-fs")
         .arg("-loop")
         .arg("-1")

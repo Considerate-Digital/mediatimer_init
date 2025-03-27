@@ -215,6 +215,10 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 Autoloop::Yes => {
                     thread::spawn(move || {
                         let child = Command::new("ffplay")
+                            .arg("-hide_banner")
+                            .arg("-loglevel")
+                            .arg("error")
+
                             .arg("-fs")
                             .arg("-loop")
                             .arg("-1")
@@ -229,6 +233,10 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 Autoloop::No => {
                     thread::spawn(move || {
                         let child = Command::new("ffplay")
+                            .arg("-hide_banner")
+                            .arg("-loglevel")
+                            .arg("error")
+
                             .arg("-fs")
                             .arg(&file)
                             .spawn().expect("no child");
