@@ -12,3 +12,6 @@ ratatui = "0.29.0"
 regex = "1.11.1"
 strum = {version ="0.27.1", features = ["derive"]}
 whoami = "1.5.2"
+
+[dev-dependencies]
+tempfile = "3.19.1"
