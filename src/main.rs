@@ -202,7 +202,6 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
-    let _stopped_task = stop_task(task_list_clone_two.clone());
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -277,18 +276,29 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 
         }
     }
+
+    // stop the task after launching the new task to ensure a smooh overlap
+    let _stopped_task = stop_task(task_list_clone_two.clone());
 }
 
 
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
-            let mut task = task_list.lock().unwrap().pop().unwrap();
-            task.child.kill().expect("command could not be killed");
+
+            let mut task = task_list.lock().unwrap().remove(0);
 
             if task.background == false {
                 // run background
                 background::run(Arc::clone(&task_list));
             }
+
+            // wait for a second before stopping the task, to allow overlap
+            let one_sec = Duration::from_millis(1000);
+            thread::sleep(one_sec);
+
+            task.child.kill().expect("command could not be killed");
+
+            
         }
 }
 
