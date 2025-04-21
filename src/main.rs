@@ -29,6 +29,14 @@ use chrono::{
 use regex::Regex;
 use whoami;
 
+mod loggers;
+use crate::loggers::{
+    setup_logger,
+    log_info,
+    log_warn,
+    log_error
+};
+
 mod mount;
 use crate::mount::identify_mounted_drives;
 
@@ -222,6 +230,9 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
+
+    log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
+    
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -307,6 +318,10 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
 
             let mut task = task_list.lock().unwrap().remove(0);
 
+            log_info(format!("Kill Task: {:?}", task.child).as_str());
+
+            task.child.kill().expect("command could not be killed");
+
             if task.background == false {
                 // run background
                 background::run(Arc::clone(&task_list));
@@ -341,6 +356,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // initialise the app
     let app = App::default();
 
+    // initialise loggers
+    setup_logger();
+
     // this will mount all of the drives automatically using udisksctl
     let _mount_drives = identify_mounted_drives();
 
@@ -349,6 +367,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
+        log_error("Cannot find env vars at path");
         display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
         process::exit(1)
     }
@@ -411,12 +430,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
     
-    // create then start the background after the task is created
-
-    
     // set up scheduler
     let mut scheduler = Scheduler::new();
     if schedule == AdvancedSchedule::Yes {
+        // create then start the background after the task is created
         let _create_background = background::make();
         let _run_background = background::run(Arc::clone(&app.task_list));
        // use the full scheduler and run the task at certain times
