@@ -29,8 +29,9 @@ use chrono::{
 use regex::Regex;
 use whoami;
 
-mod log;
-use crate::log::{
+mod loggers;
+use crate::loggers::{
+    setup_logger,
     log_info,
     log_warn,
     log_error
@@ -211,7 +212,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone_two = Arc::clone(&task_list);
     let _stopped_task = stop_task(task_list_clone_two.clone());
 
-    log_info(format!("Run task: {:?}", task.lock().unwrap()));
+    log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
     
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
@@ -293,7 +294,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
             let mut task = task_list.lock().unwrap().pop().unwrap();
-            log_info(format!("Kill Task: {:?}", task.child));
+            log_info(format!("Kill Task: {:?}", task.child).as_str());
             task.child.kill().expect("command could not be killed");
 
             if task.background == false {
@@ -321,6 +322,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     
     // initialise the app
     let app = App::default();
+
+    // initialise loggers
+    setup_logger();
 
     // this will mount all of the drives automatically using udisksctl
     let _mount_drives = identify_mounted_drives();
