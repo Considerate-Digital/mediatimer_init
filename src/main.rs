@@ -473,7 +473,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                    let min_num = date_nums[4];
                    let sec_num = date_nums[5];
 
-                   // TODO error handling
                    let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
 
                    let start_time = Local.with_ymd_and_hms(
