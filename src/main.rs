@@ -51,6 +51,13 @@ enum Autoloop {
     No
 }
 
+#[derive(Debug, Display, PartialEq)]
+pub enum AdvancedSchedule {
+    Yes,
+    No
+}
+
+
 type Schedule = Vec<(String, String)>;
 type Timings = Vec<Weekday>;
 
@@ -336,8 +343,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut file = PathBuf::new();
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
-    // TODO should be updated to AdvancedSchedule enum
-    let mut schedule = false;
+    let mut schedule = AdvancedSchedule::No;
     let mut timings: Vec<Weekday> = Vec::with_capacity(7);
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
     let mut tuesday: Weekday = Weekday::Tuesday(Vec::with_capacity(2));
@@ -356,10 +362,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &_ => Autoloop::No
             },
             "ML_FILE" => file.push(value.as_str()),
-            "ML_SCHEDULE" => match value.as_str() {
-                "true" => schedule = true,
-                "false" => schedule = false,
-                &_ => schedule = false
+            "ML_SCHEDULE" => schedule = match value.as_str() {
+                "true" => AdvancedSchedule::Yes,
+                "false" => AdvancedSchedule::No,
+                &_ => AdvancedSchedule::No
             },
             "ML_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()))?,
             "ML_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()))?,
@@ -397,7 +403,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
-    if schedule == true {
+    if schedule == AdvancedSchedule::Yes {
         let _create_background = background::make();
         let _run_background = background::run(Arc::clone(&app.task_list));
        // use the full scheduler and run the task at certain times
