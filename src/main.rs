@@ -478,13 +478,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                    let start_time = Local.with_ymd_and_hms(
                        year_num, month_num, day_num, 
-                       start_hour, start_min, start_sec).unwrap();
+                       start_hour, start_min, start_sec).unwrap_or_else(|_| {
+                           let error_message = format!("Could not parse a start time for {}", timing_day);
+                           error_log(&error_message);
+                           display_error_with_message(&error_message);
+                       });
 
                    let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
 
                    let end_time = Local.with_ymd_and_hms(
                        year_num, month_num, day_num, 
-                       end_hour, end_min, end_sec).unwrap();
+                       end_hour, end_min, end_sec).unwrap_or_else(|_| {
+                           let error_message = format!("Could not parse an end time for {}", timing_day);
+                           error_log(&error_message);
+                           display_error_with_message(&error_message);
+                       });
+
 
                     let local_timestamp = local.timestamp(); 
                    // if &timing.0 is less 
