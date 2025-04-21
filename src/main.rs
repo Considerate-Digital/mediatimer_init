@@ -157,31 +157,45 @@ impl RunningTask {
     }
 }
 
+fn timing_format_correct(string_of_times: &str) -> bool {
+    let re = Regex::new(r"^(?<h>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<h2>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$").unwrap();
+    if re.is_match(string_of_times) { 
+        let times: Vec<(u32, u32)> = re.captures_iter(string_of_times).map(|times| {
+            let hour_1 = times.name("h").unwrap().as_str();
+            let hour_1 = hour_1.parse::<u32>().unwrap();
+            let hour_2 = times.name("h2").unwrap().as_str();
+            let hour_2 = hour_2.parse::<u32>().unwrap();
+            (hour_1, hour_2)
+        }).collect();
+        for time_pair in times.iter() {
+            if time_pair.0 < 24 && 
+                time_pair.1 < 24 {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        false
+    } else {
+        false
+    }
+}
 
 fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
+
+    if !timing_format_correct(&value) {
+        display_error_with_message("Schedule incorrectly formatted!");
+        process::exit(1);
+    }
+
     let mut day_schedule = Vec::new();
+
     if &value != "" {
         let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
         let string_vec_test = string_vec.clone();
 
-        // check the schedule format matches 00:00 or 00:00:00
-        // move these check to the "to weekday" function
-        // TODO change to updated regex
-        let re = Regex::new(r"(^\d{2}:\d{2}-\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}-\d{2}:\d{2}:\d{2}$|^\d{2}:\d{2}:\d{2}-\d{2}:\d{2}$)").unwrap();
-        // check the times split correctly
         let parsed_count = string_vec_test.len();  
         let string_of_times = string_vec_test.iter().map(|s| s.to_string()).collect::<String>();
-        let mut re_count = 0;
-        for time in string_vec_test.iter() {
-            if re.is_match(&time) == true {
-                re_count += 1;
-            }
-        }
-        if parsed_count != re_count {
-            // timings do not match
-            display_error_with_message("Schedule incorrectly formatted!");
-            process::exit(1);
-        }
 
         for time in string_vec.iter() {
             let start_end = time.as_str()
@@ -193,6 +207,7 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
             day_schedule.push((start, end));
         }
     }
+
     match day {
        Weekday::Monday(_) =>  Ok(Weekday::Monday(day_schedule)),
        Weekday::Tuesday(_) => Ok(Weekday::Tuesday(day_schedule)),
@@ -202,8 +217,6 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Saturday(_) => Ok(Weekday::Saturday(day_schedule)),
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
-
-
 }
 
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
