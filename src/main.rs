@@ -47,11 +47,15 @@ use crate::error::error as display_error;
 use crate::error::error_with_message as display_error_with_message;
 
 #[derive(Debug,Clone, Copy)]
-enum ProcType {
-    Media,
+pub enum ProcType {
+    Video,
+    Audio,
+    Image,
+    Slideshow,
     Browser,
     Executable,
 }
+
 
 #[derive(Debug, Clone, Copy)]
 enum Autoloop {
@@ -128,15 +132,18 @@ struct Task {
     auto_loop: Autoloop,
     timings: Timings,
     file: PathBuf,
+    slide_delay: u32
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, slide_delay: u32) -> Self {
         Task {
             proc_type,
             auto_loop,
             timings,
-            file
+            file,
+            slide_delay
+
         }
     }
     fn set_loop(&mut self, auto_loop: Autoloop) {
@@ -226,7 +233,8 @@ fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
 }
-
+// TODO add v2
+#[cfg(feature="v1")]
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
@@ -239,8 +247,47 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     };
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
+    let slide_delay = task.lock().unwrap().slide_delay.to_string();
+
     match task.lock().unwrap().proc_type {
-        ProcType::Media => {
+        ProcType::Video => {
+            match looper {
+                Autoloop::Yes => {
+                    thread::spawn(move || {
+                        let child = Command::new("ffplay")
+                            .arg("-hide_banner")
+                            .arg("-loglevel")
+                            .arg("error")
+                            .arg("-an")
+                            .arg("-fs")
+                            .arg("-loop")
+                            .arg("-1")
+                            .arg(&file)
+                            .spawn().expect("no child");
+
+                        let running_task = RunningTask::new(child, false);
+                        task_list_clone.lock().unwrap().push(running_task);
+                    });
+
+                }
+                Autoloop::No => {
+                    thread::spawn(move || {
+                        let child = Command::new("ffplay")
+                            .arg("-hide_banner")
+                            .arg("-loglevel")
+                            .arg("error")
+                            .arg("-an")
+                            .arg("-fs")
+                            .arg(&file)
+                            .spawn().expect("no child");
+
+                        let running_task = RunningTask::new(child, false);
+                        task_list_clone.lock().unwrap().push(running_task);
+                    });
+                }
+            };
+        },
+        ProcType::Audio => {
             match looper {
                 Autoloop::Yes => {
                     thread::spawn(move || {
@@ -277,6 +324,31 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 }
             };
         },
+        ProcType::Image => {
+            thread::spawn(move || {
+                let child = Command::new("feh")
+                    .arg("-YxqFZz")
+                    .arg("-B black")
+                    .arg(&file)
+                    .spawn().expect("no child");
+                let running_task = RunningTask::new(child, false);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+        },
+        ProcType::Slideshow => {
+            thread::spawn(move || {
+                let child = Command::new("feh")
+                    .arg("-YxqFZz")
+                    .arg("-B")
+                    .arg("black")
+                    .arg("-D")
+                    .arg(&slide_delay)
+                    .arg(&file)
+                    .spawn().expect("no child");
+                let running_task = RunningTask::new(child, false);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+        },
         ProcType::Browser => {
             thread::spawn(move || {
                 let child = Command::new("chromium")
@@ -300,7 +372,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 let child = Command::new("sh")
                     .arg(&file)
                     .spawn().expect("no child");
-
                         let running_task = RunningTask::new(child, false);
                     task_list_clone.lock().unwrap().push(running_task);
             });
@@ -373,6 +444,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut file = PathBuf::new();
+    let mut slide_delay: u32 = 5;
     let mut proc_type = String::with_capacity(10);
     let mut auto_loop = Autoloop::No;
     let mut schedule = AdvancedSchedule::No;
@@ -387,25 +459,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for (key, value) in env::vars() {
         match key.as_str() {
-            "ML_PROCTYPE" => proc_type.push_str(&value),
-            "ML_AUTOLOOP" => auto_loop = match value.as_str() {
+            "MT_PROCTYPE" => proc_type.push_str(&value),
+            "MT_AUTOLOOP" => auto_loop = match value.as_str() {
                 "true" => Autoloop::Yes,
                 "false" => Autoloop::No,
                 &_ => Autoloop::No
             },
-            "ML_FILE" => file.push(value.as_str()),
-            "ML_SCHEDULE" => schedule = match value.as_str() {
+            "MT_FILE" => file.push(value.as_str()),
+            "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
+            "MT_SCHEDULE" => schedule = match value.as_str() {
                 "true" => AdvancedSchedule::Yes,
                 "false" => AdvancedSchedule::No,
                 &_ => AdvancedSchedule::No
             },
-            "ML_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()))?,
-            "ML_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()))?,
-            "ML_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()))?,
-            "ML_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()))?,
-            "ML_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()))?,
-            "ML_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()))?,
-            "ML_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()))?,
+            "MT_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()))?,
+            "MT_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()))?,
+            "MT_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()))?,
+            "MT_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()))?,
+            "MT_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()))?,
+            "MT_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()))?,
+            "MT_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()))?,
             _ => {}
         }
     }
@@ -414,12 +487,14 @@ fn main() -> Result<(), Box<dyn Error>> {
    
     let timings_clone = timings.clone();
 
-    // convert the proc type to enum
     let proc_type = match proc_type.to_lowercase().as_str() {
-        "media" => ProcType::Media,
+        "video" => ProcType::Video,
+        "audio" => ProcType::Audio,
+        "image" => ProcType::Image,
+        "slideshow" => ProcType::Slideshow,
         "browser" => ProcType::Browser,
         "executable" => ProcType::Executable,
-        &_ => ProcType::Media
+        &_ => ProcType::Video
     };
 
     // check task elements here
@@ -428,7 +503,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         display_error_with_message("Could not find file!");    
     }
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay)));
     
     // set up scheduler
     let mut scheduler = Scheduler::new();
