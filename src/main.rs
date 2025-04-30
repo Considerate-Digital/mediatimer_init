@@ -63,7 +63,7 @@ enum Autoloop {
     No
 }
 
-#[derive(Debug, Display, PartialEq)]
+#[derive(Debug, Display, PartialEq, Clone)]
 pub enum AdvancedSchedule {
     Yes,
     No
@@ -143,7 +143,6 @@ impl Task {
             timings,
             file,
             slide_delay
-
         }
     }
     fn set_loop(&mut self, auto_loop: Autoloop) {
@@ -196,9 +195,9 @@ fn timing_format_correct(string_of_times: &str) -> bool {
     }
 }
 
-fn to_weekday(value: String, day: Weekday) -> Result<Weekday, Box<dyn Error>> {
+fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
 
-    if !timing_format_correct(&value) {
+    if schedule == AdvancedSchedule::Yes && !timing_format_correct(&value) {
         display_error_with_message("Schedule incorrectly formatted!");
         process::exit(1);
     }
@@ -295,7 +294,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg("-hide_banner")
                             .arg("-loglevel")
                             .arg("error")
-
                             .arg("-fs")
                             .arg("-loop")
                             .arg("-1")
@@ -313,7 +311,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg("-hide_banner")
                             .arg("-loglevel")
                             .arg("error")
-
                             .arg("-fs")
                             .arg(&file)
                             .spawn().expect("no child");
@@ -328,7 +325,8 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
             thread::spawn(move || {
                 let child = Command::new("feh")
                     .arg("-YxqFZz")
-                    .arg("-B black")
+                    .arg("-B")
+                    .arg("black")
                     .arg(&file)
                     .spawn().expect("no child");
                 let running_task = RunningTask::new(child, false);
@@ -472,13 +470,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "false" => AdvancedSchedule::No,
                 &_ => AdvancedSchedule::No
             },
-            "MT_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()))?,
-            "MT_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()))?,
-            "MT_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()))?,
-            "MT_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()))?,
-            "MT_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()))?,
-            "MT_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()))?,
-            "MT_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()))?,
+            "MT_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()), schedule.clone())?,
+            "MT_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()), schedule.clone())?,
+            "MT_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()), schedule.clone())?,
+            "MT_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()), schedule.clone())?,
+            "MT_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()), schedule.clone())?,
+            "MT_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()), schedule.clone())?,
+            "MT_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()), schedule.clone())?,
             _ => {}
         }
     }
@@ -654,14 +652,16 @@ mod tests {
     fn test_task_new() {
         let file_path = PathBuf::from("/tmp/test.mp4");
         let task = Task::new(
-            ProcType::Media, 
+            ProcType::Video, 
             Autoloop::No, 
             Vec::new(), 
-            file_path.clone()
+            file_path.clone(),
+            7
+
         );
         
         match task.proc_type {
-            ProcType::Media => assert!(true),
+            ProcType::Video => assert!(true),
             _ => assert!(false, "Incorrect proc_type"),
         }
         
@@ -678,10 +678,11 @@ mod tests {
     fn test_task_setters() {
         let file_path = PathBuf::from("/tmp/test.mp4");
         let mut task = Task::new(
-            ProcType::Media, 
+            ProcType::Video, 
             Autoloop::No, 
             Vec::new(), 
-            file_path
+            file_path,
+            7
         );
         
         task.set_loop(Autoloop::Yes);
@@ -786,7 +787,8 @@ mod tests {
             ProcType::Executable,
             Autoloop::No,
             Vec::new(),
-            script_path
+            script_path,
+            5
         )));
         
         
