@@ -197,15 +197,19 @@ fn timing_format_correct(string_of_times: &str) -> bool {
 
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
 
-    if schedule == AdvancedSchedule::Yes && !timing_format_correct(&value) {
-        display_error_with_message("Schedule incorrectly formatted!");
-        process::exit(1);
-    }
-
+    
     let mut day_schedule = Vec::new();
 
     if &value != "" {
         let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
+
+        for start_and_end in string_vec.iter() {
+            if schedule == AdvancedSchedule::Yes && !timing_format_correct(start_and_end) {
+                display_error_with_message("Schedule incorrectly formatted!");
+                process::exit(1);
+            }
+        }
+
         let string_vec_test = string_vec.clone();
 
         let parsed_count = string_vec_test.len();  
