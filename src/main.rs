@@ -716,7 +716,8 @@ mod tests {
     #[test]
     fn test_to_weekday_valid_format() {
         let value = "08:00-12:00".to_string();
-        let result = to_weekday(value, Weekday::Monday(Vec::new()));
+        let schedule = AdvancedSchedule::No;
+        let result = to_weekday(value, Weekday::Monday(Vec::new()), schedule);
         
         assert!(result.is_ok());
         match result.unwrap() {
@@ -732,7 +733,8 @@ mod tests {
     #[test]
     fn test_to_weekday_multiple_schedules() {
         let value = "08:00-12:00, 14:00-16:00".to_string();
-        let result = to_weekday(value, Weekday::Tuesday(Vec::new()));
+        let schedule = AdvancedSchedule::No;
+        let result = to_weekday(value, Weekday::Tuesday(Vec::new()), schedule);
         
         assert!(result.is_ok());
         match result.unwrap() {
@@ -750,7 +752,8 @@ mod tests {
     #[test]
     fn test_to_weekday_empty_string() {
         let value = "".to_string();
-        let result = to_weekday(value, Weekday::Wednesday(Vec::new()));
+        let schedule = AdvancedSchedule::No;
+        let result = to_weekday(value, Weekday::Wednesday(Vec::new()), schedule);
         
         assert!(result.is_ok());
         match result.unwrap() {
