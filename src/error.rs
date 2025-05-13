@@ -100,7 +100,7 @@ impl Widget for &ErrorTerm {
                 Line::raw("To reset the program run 'mediatimer' in a terminal."),
                 Line::raw(""),
                 Line::raw("Or manually edit the mediatimer config file at"),
-                Line::raw("/home/your-user-name/.mediatimer_config/vars"),
+                Line::raw("/home/adaptable/.mediatimer_config/vars"),
             ];
 
         } else {
@@ -111,7 +111,7 @@ impl Widget for &ErrorTerm {
                 Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
                 Line::raw(""),
                 Line::raw("Or manually edit the Media Timer config file at"),
-                Line::raw("/home/your-user-name/.mediatimer_config/vars"),
+                Line::raw("/home/adaptable/.mediatimer_config/vars"),
             ];
         }
 
