@@ -237,7 +237,7 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
     }
 }
 // TODO add v2
-#[cfg(feature="v1")]
+#[cfg(feature="eco")]
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
