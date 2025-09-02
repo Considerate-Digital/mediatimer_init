@@ -378,8 +378,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .process_group(0)
                     .spawn().expect("no child");
 
-                println!("new child ID: {}", child.id());
-
                 let running_task = RunningTask::new(child, false);
                 task_list_clone.lock().unwrap().push(running_task);
             });
