@@ -8,9 +8,11 @@ use std::{
     process,
     process::{
         Command,
-        Child
+        Child,
+        Stdio
     },
     ops::Deref,
+    os::unix::process::CommandExt
 };
 use strum::Display;
 
@@ -373,9 +375,13 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
             thread::spawn(move || {
                 let child = Command::new("sh")
                     .arg(&file)
+                    .process_group(0)
                     .spawn().expect("no child");
-                        let running_task = RunningTask::new(child, false);
-                    task_list_clone.lock().unwrap().push(running_task);
+
+                println!("new child ID: {}", child.id());
+
+                let running_task = RunningTask::new(child, false);
+                task_list_clone.lock().unwrap().push(running_task);
             });
 
         }
@@ -519,6 +525,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
             thread::spawn(move || {
                 let child = Command::new("sh")
                     .arg(&file)
+                    .process_group(0)
                     .spawn().expect("no child");
                         let running_task = RunningTask::new(child, false);
                     task_list_clone.lock().unwrap().push(running_task);
@@ -664,9 +671,11 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
             thread::spawn(move || {
                 let child = Command::new("sh")
                     .arg(&file)
+                    .process_group(0)
                     .spawn().expect("no child");
-                        let running_task = RunningTask::new(child, false);
-                    task_list_clone.lock().unwrap().push(running_task);
+
+                let running_task = RunningTask::new(child, false);
+                task_list_clone.lock().unwrap().push(running_task);
             });
 
         }
@@ -683,8 +692,22 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
             log_info(format!("Kill Task: {:?}", task.child).as_str());
 
             task.child.kill().expect("command could not be killed");
+            
+            
 
             if task.background == false {
+                // clears up any sub processes: particularly needed for "executable" 
+                // proctypes as anything spawned from a sub shell will likely have a different PID
+                if let id = task.child.id() {
+                    let neg_id = format!("-{}", id.to_string());
+                    let _kill_child = Command::new("kill")
+                        .arg("-TERM")
+                        .arg("--")
+                        .arg(neg_id)
+                        .output()
+                        .expect("Failed to remove child with kill command");
+                }
+
                 // run background
                 background::run(Arc::clone(&task_list));
             }
