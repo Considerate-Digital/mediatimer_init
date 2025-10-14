@@ -161,14 +161,16 @@ impl Task {
 #[derive(Debug)]
 struct RunningTask {
     child: process::Child,
-    background: bool
+    background: bool,
+    task: Task
 }
 
 impl RunningTask {
-    fn new(child: Child, background: bool) -> RunningTask {
+    fn new(child: Child, background: bool, task, Task) -> RunningTask {
         RunningTask {
             child,
-            background
+            background,
+            task
         }
     }
 }
@@ -243,6 +245,7 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
+    let task_clone = Arc::clone(&task);
 
     log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
     
@@ -270,7 +273,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                        let running_task = RunningTask::new(child, false, task_clone);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
 
@@ -286,7 +289,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                        let running_task = RunningTask::new(child, false, task_clone);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
                 }
@@ -307,7 +310,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                        let running_task = RunningTask::new(child, false, task_clone);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
 
@@ -323,7 +326,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                        let running_task = RunningTask::new(child, false, task_clone);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
                 }
@@ -337,7 +340,8 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg("black")
                     .arg(&file)
                     .spawn().expect("no child");
-                let running_task = RunningTask::new(child, false);
+                        
+                let running_task = RunningTask::new(child, false, task_clone);
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
@@ -351,7 +355,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg(&slide_delay)
                     .arg(&file)
                     .spawn().expect("no child");
-                let running_task = RunningTask::new(child, false);
+                let running_task = RunningTask::new(child, false, task_clone);
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
@@ -368,7 +372,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg(&file)
                     .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                let running_task = RunningTask::new(child, false, task_clone);
                     task_list_clone.lock().unwrap().push(running_task);
             });
 
@@ -380,7 +384,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .process_group(0)
                     .spawn().expect("no child");
 
-                let running_task = RunningTask::new(child, false);
+                let running_task = RunningTask::new(child, false, task_clone);
                 task_list_clone.lock().unwrap().push(running_task);
             });
 
@@ -421,7 +425,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false);
+                let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
 
@@ -709,6 +713,7 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
                 }
 
                 // run background
+
                 background::run(Arc::clone(&task_list));
             }
 
