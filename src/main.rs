@@ -48,7 +48,7 @@ mod error;
 use crate::error::error as display_error;
 use crate::error::error_with_message as display_error_with_message;
 
-#[derive(Debug,Clone, Copy)]
+#[derive(Debug,Clone, Copy, PartialEq)]
 pub enum ProcType {
     Video,
     Audio,
@@ -147,6 +147,15 @@ impl Task {
             slide_delay
         }
     }
+    fn background() -> Self {
+        Task {
+            proc_type: ProcType::Video,
+            auto_loop: Autoloop::Yes,
+            timings: Vec::with_capacity(0),
+            file: PathBuf::from("/"),
+            slide_delay: 5
+        }
+    }
     fn set_loop(&mut self, auto_loop: Autoloop) {
         self.auto_loop = auto_loop;
     }
@@ -162,11 +171,11 @@ impl Task {
 struct RunningTask {
     child: process::Child,
     background: bool,
-    task: Task
+    task: Arc<Mutex<Task>>
 }
 
 impl RunningTask {
-    fn new(child: Child, background: bool, task, Task) -> RunningTask {
+    fn new(child: Child, background: bool, task: Arc<Mutex<Task>>) -> RunningTask {
         RunningTask {
             child,
             background,
@@ -688,6 +697,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     // stop the task after launching the new task to ensure a smooh overlap
     let _stopped_task = stop_task(task_list_clone_two.clone());
 }
+
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
 
@@ -711,10 +721,14 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
                         .output()
                         .expect("Failed to remove child with kill command");
                 }
-
+                
                 // run background
+                if task.task.lock().unwrap().proc_type == ProcType::Audio {
+                    background::run(Arc::clone(&task_list), true);
+                } else {
+                    background::run(Arc::clone(&task_list), false);
+                }
 
-                background::run(Arc::clone(&task_list));
             }
 
             // wait for a second before stopping the task, to allow overlap
@@ -722,8 +736,6 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
             thread::sleep(one_sec);
 
             task.child.kill().expect("command could not be killed");
-
-            
         }
 }
 
@@ -815,7 +827,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         "executable" => ProcType::Executable,
         &_ => ProcType::Video
     };
-
+    
+    let proc_type_clone = proc_type;
+    let proc_type_clone2 = proc_type;
     // check task elements here
     // does the file exist? 
     if false == file.as_path().exists() {
@@ -828,8 +842,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut scheduler = Scheduler::new();
     if schedule == AdvancedSchedule::Yes {
         // create then start the background after the task is created
-        let _create_background = background::make();
-        let _run_background = background::run(Arc::clone(&app.task_list));
+        let _create_background = background::make(proc_type_clone);
+        if proc_type == ProcType::Audio { 
+            let _run_background = background::run(Arc::clone(&app.task_list), true);
+        } else {
+            let _run_background = background::run(Arc::clone(&app.task_list), false);
+        }
        // use the full scheduler and run the task at certain times
        for day in timings_clone.iter() {
            let day_name = match day {
