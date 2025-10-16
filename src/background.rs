@@ -20,39 +20,36 @@ use crate::error::error_with_message as display_error_with_message;
 pub fn make(proc_type: ProcType) {
     let username = whoami::username();
     let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/black.mp4"].iter().collect();
-    if !env_dir_path.exists() {
-        let path_str = env_dir_path.to_str().unwrap();
-        if proc_type == ProcType::Audio {
-            let _made_background_audio = Command::new("ffmpeg")
-                .arg("-hide_banner")
-                .arg("-loglevel")
-                .arg("error")
-                .arg("-f")
-                .arg("lavfi")
-                .arg("-i")
-                .arg("aevalsrc=0:s=48000:n=1920:d=4.0")
-                .arg(path_str)
-                .output()
-                .expect("Could not create empty audio");
+    let path_str = env_dir_path.to_str().unwrap();
+    if proc_type == ProcType::Audio {
+        let _made_background_audio = Command::new("ffmpeg")
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg("aevalsrc=0:s=48000:n=1920:d=4.0")
+            .arg(path_str)
+            .output()
+            .expect("Could not create empty audio");
 
-        } else {
-            let _made_background = Command::new("ffmpeg")
-                .arg("-hide_banner")
-                .arg("-loglevel")
-                .arg("error")
-                .arg("-f")
-                .arg("lavfi")
-                .arg("-y")
-                .arg("-i")
-                .arg("color=black:s=1920x1080:r=1")
-                .arg("-t")
-                .arg("30")
-                .arg(path_str)
-                .output()
-                .expect("Could not create black video");
-        }
+    } else {
+        let _made_background = Command::new("ffmpeg")
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-f")
+            .arg("lavfi")
+            .arg("-y")
+            .arg("-i")
+            .arg("color=black:s=1920x1080:r=1")
+            .arg("-t")
+            .arg("30")
+            .arg(path_str)
+            .output()
+            .expect("Could not create black video");
     }
-    
 }
 
 pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>, audio: bool) {
