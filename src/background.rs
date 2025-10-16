@@ -30,7 +30,7 @@ pub fn make(proc_type: ProcType) {
                 .arg("-f")
                 .arg("lavfi")
                 .arg("-i")
-                .arg("aevalsrc=0:s=48000:n=1920:d=10.0")
+                .arg("aevalsrc=0:s=48000:n=1920:d=4.0")
                 .arg(path_str)
                 .output()
                 .expect("Could not create empty audio");
