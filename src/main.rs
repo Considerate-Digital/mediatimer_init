@@ -960,8 +960,20 @@ mod tests {
     // Test functionality of the RunningTask struct
     #[test]
     fn test_running_task_new() {
+        
+        let test_task = Task::new(
+            ProcType::Browser,
+            Autoloop::No,
+            Vec::with_capacity(0),
+            PathBuf::from("/"),
+            5
+        );
+
+
         let dummy_child = Command::new("echo").spawn().expect("Failed to create dummy process");
-        let task = RunningTask::new(dummy_child, false);
+        let task = RunningTask::new(dummy_child, false, 
+            Arc::new(Mutex::new(test_task))
+            );
         
         assert_eq!(task.background, false);
         // We can't directly test the child process, but we can verify the struct was created
@@ -972,8 +984,9 @@ mod tests {
     
     #[test]
     fn test_run_and_stop_task() {
-
-        let _create_background = background::make();
+        
+        let video_proc = ProcType::Video;
+        let _create_background = background::make(video_proc);
 
         let task_list = Arc::new(Mutex::new(Vec::new()));
 
