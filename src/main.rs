@@ -8,10 +8,8 @@ use std::{
     process,
     process::{
         Command,
-        Child,
-        Stdio
+        Child
     },
-    ops::Deref,
     os::unix::process::CommandExt
 };
 use strum::Display;
@@ -23,7 +21,6 @@ use clokwerk::{
 };
 
 use chrono::{
-    DateTime,
     TimeZone,
     Local
 };
@@ -35,7 +32,6 @@ mod loggers;
 use crate::loggers::{
     setup_logger,
     log_info,
-    log_warn,
     log_error
 };
 
@@ -98,29 +94,6 @@ impl Weekday {
             Weekday::Sunday(_) => "Sunday"
         }
     }
-    fn to_string(&self) -> String {
-        match self {
-            Weekday::Monday(_) => String::from("Monday"),
-            Weekday::Tuesday(_) => String::from("Tuesday"),
-            Weekday::Wednesday(_) => String::from("Wednesday"),
-            Weekday::Thursday(_) => String::from("Thursday"),
-            Weekday::Friday(_) => String::from("Friday"),
-            Weekday::Saturday(_) => String::from("Saturday"),
-            Weekday::Sunday(_) => String::from("Sunday")
-        }
-    }
-
-    fn timings(&self) -> Schedule {
-        match self {
-            Weekday::Monday(schedule) => schedule.clone(),
-            Weekday::Tuesday(schedule) => schedule.clone(),
-            Weekday::Wednesday(schedule) => schedule.clone(),
-            Weekday::Thursday(schedule) => schedule.clone(),
-            Weekday::Friday(schedule) => schedule.clone(),
-            Weekday::Saturday(schedule) => schedule.clone(),
-            Weekday::Sunday(schedule) => schedule.clone()
-        }
-    }
 }
 
 
@@ -155,15 +128,6 @@ impl Task {
             file: PathBuf::from("/"),
             slide_delay: 5
         }
-    }
-    fn set_loop(&mut self, auto_loop: Autoloop) {
-        self.auto_loop = auto_loop;
-    }
-    fn set_proc_type(&mut self, p_type: ProcType) {
-        self.proc_type = p_type;
-    }
-    fn set_weekday(&mut self, wd: Weekday) {
-        self.timings.push(wd);
     }
 }
 
@@ -222,11 +186,6 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
                 process::exit(1);
             }
         }
-
-        let string_vec_test = string_vec.clone();
-
-        let parsed_count = string_vec_test.len();  
-        let string_of_times = string_vec_test.iter().map(|s| s.to_string()).collect::<String>();
 
         for time in string_vec.iter() {
             let start_end = time.as_str()
@@ -570,15 +529,14 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
             if task.background == false {
                 // clears up any sub processes: particularly needed for "executable" 
                 // proctypes as anything spawned from a sub shell will likely have a different PID
-                if let id = task.child.id() {
-                    let neg_id = format!("-{}", id.to_string());
-                    let _kill_child = Command::new("kill")
-                        .arg("-TERM")
-                        .arg("--")
-                        .arg(neg_id)
-                        .output()
-                        .expect("Failed to remove child with kill command");
-                }
+                let id = task.child.id();
+                let neg_id = format!("-{}", id.to_string());
+                let _kill_child = Command::new("kill")
+                    .arg("-TERM")
+                    .arg("--")
+                    .arg(neg_id)
+                    .output()
+                    .expect("Failed to remove child with kill command");
                 
                 // run background
                 if task.task.lock().unwrap().proc_type == ProcType::Audio {
@@ -625,7 +583,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let username = whoami::username();
     let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
 
-    if let Err(e) = dotenvy::from_path_override(env_dir_path.as_path()) {
+    if let Err(_) = dotenvy::from_path_override(env_dir_path.as_path()) {
         eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
         log_error("Cannot find env vars at path");
         display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
@@ -687,7 +645,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     
     let proc_type_clone = proc_type;
-    let proc_type_clone2 = proc_type;
     // check task elements here
     // does the file exist? 
     if false == file.as_path().exists() {
@@ -756,9 +713,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                    let year_num = date_nums[0] as i32;
                    let month_num = date_nums[1];
                    let day_num = date_nums[2];
-                   let hour_num = date_nums[3];
-                   let min_num = date_nums[4];
-                   let sec_num = date_nums[5];
+                   let _hour_num = date_nums[3];
+                   let _min_num = date_nums[4];
+                   let _sec_num = date_nums[5];
 
                    let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
 

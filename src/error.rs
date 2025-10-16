@@ -6,10 +6,6 @@ use ratatui::{
         self,
         Event, KeyCode, KeyEventKind
     },
-    layout::{
-        Layout, 
-        Constraint,
-    },
     text::{
         Line
     },

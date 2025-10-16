@@ -1,7 +1,6 @@
 use std::{
     path::PathBuf,
     process::Command,
-    thread,
     sync::{
         Mutex,
         Arc
