@@ -424,6 +424,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg("-hide_banner")
                             .arg("-loglevel")
                             .arg("error")
+                            .arg("-nodisp")
                             //.arg("-fs")
                             .arg("-loop")
                             .arg("-1")
@@ -442,6 +443,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg("-loglevel")
                             .arg("error")
                             //.arg("-fs")
+                            .arg("-nodisp")
                             .arg(&file)
                             .spawn().expect("no child");
 
