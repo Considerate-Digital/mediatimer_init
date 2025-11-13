@@ -363,7 +363,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let _stopped_task = stop_task(task_list_clone_two.clone());
 }
 
-#[cfg(feature="standard")]
+#[cfg(any(feature="standard", feature="pro"))]
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
