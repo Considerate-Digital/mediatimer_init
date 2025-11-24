@@ -44,7 +44,7 @@ pub fn make(proc_type: ProcType) {
             .arg("-i")
             .arg("color=black:s=1920x1080:r=1")
             .arg("-t")
-            .arg("30")
+            .arg("2")
             .arg(path_str)
             .output()
             .expect("Could not create black video");
@@ -58,33 +58,16 @@ pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>, audio: bool) {
     let background_task = Task::background();
 
     let path_str = env_dir_path.to_str().unwrap();
-    if audio == true {
-        let child = Command::new("ffplay")
-            .arg("-hide_banner")
-            .arg("-loglevel")
-            .arg("error")
-            .arg("-fs")
-            .arg("-loop")
-            .arg("-1")
-            .arg(path_str)
-            .spawn()
-            .expect("no child");
-        let running_task = RunningTask::new(child, true, Arc::new(Mutex::new(background_task)));
-        task_list.lock().unwrap().push(running_task);
-    } else {
-        let child = Command::new("ffplay")
-            .arg("-hide_banner")
-            .arg("-loglevel")
-            .arg("error")
-            .arg("-fs")
-            .arg("-nodisp")
-            .arg("-loop")
-            .arg("-1")
-            .arg(path_str)
-            .spawn()
-            .expect("no child");
-        let running_task = RunningTask::new(child, true, Arc::new(Mutex::new(background_task)));
-        task_list.lock().unwrap().push(running_task);
-    }
-
+    let child = Command::new("ffplay")
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        .arg("-fs")
+        .arg("-loop")
+        .arg("-1")
+        .arg(path_str)
+        .spawn()
+        .expect("no child");
+    let running_task = RunningTask::new(child, true, Arc::new(Mutex::new(background_task)));
+    task_list.lock().unwrap().push(running_task);
 }

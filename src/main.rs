@@ -515,8 +515,6 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let _stopped_task = stop_task(task_list_clone_two.clone());
 }
 
-//#[cfg(feature="pro")] Coming soon
-
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
         if task_list.lock().unwrap().len() > 0 {
 
