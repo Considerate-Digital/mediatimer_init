@@ -46,8 +46,20 @@ mod error;
 use crate::error::error as display_error;
 use crate::error::error_with_message as display_error_with_message;
 
+mod sender;
+
+mod receiver;
+
+#[derive(Debug,Clone, Copy, PartialEq)]
+pub enum StreamMode {
+    Sender,
+    Receiver,
+    Off
+}
+
 #[derive(Debug,Clone, Copy, PartialEq)]
 pub enum ProcType {
+    MultiStream,
     Video,
     Audio,
     Image,
@@ -228,6 +240,9 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
+        ProcType::MultiStream => {
+            //TODO
+        },
         ProcType::Video => {
             match looper {
                 Autoloop::Yes => {
@@ -383,6 +398,9 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
+        ProcType::MultiStream => {
+            //TODO
+        },
         ProcType::Video => {
             match looper {
                 Autoloop::Yes => {
@@ -584,6 +602,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // set up task vars
     let mut file = PathBuf::new();
+    let mut stream_mode = StreamMode::Off;
+    let mut control_ip = String::with_capacity(12);
     let mut slide_delay: u32 = 5;
     let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
@@ -637,8 +657,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         for (key, value) in env::vars() {
             match key.as_str() {
+                "MT_CONTROL" => control_ip = String::from(value.as_str()),
+                "MT_STREAMMODE" => {
+                    stream_mode = match value.as_str() {
+                        "sender" => StreamMode::Sender,
+                        "receiver" => StreamMode::Receiver,
+                        &_ => StreamMode::Off
+                    }
+                },
                 "MT_PROCTYPE" => { 
                     proc_type = match value.as_str() {
+                        "multistream" => ProcType::MultiStream,
                         "video" => ProcType::Video,
                         "audio" => ProcType::Audio,
                         "image" => ProcType::Image,
@@ -674,6 +703,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             display_error_with_message("Could not find file!");    
         }
     } 
+
+    // check if stream mode is sender/receiver or off
+    if stream_mode == StreamMode::Receiver {
+        // pass the port, sink name and controll ip address
+        let _start_receiver = receiver::receiver_init(
+            5004,
+            "autovideosink",
+            control_ip,
+            ).unwrap();
+
+    } else if stream_mode == StreamMode::Sender {
+        // we need to stream using the schedule
+        //
+    } else { // stream mode is off
+
+    }
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
 
