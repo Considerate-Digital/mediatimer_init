@@ -10,7 +10,9 @@ use std::{
         Command,
         Child
     },
-    os::unix::process::CommandExt
+    os::unix::process::CommandExt,
+    fs
+
 };
 use strum::Display;
 
@@ -161,9 +163,9 @@ fn timing_format_correct(string_of_times: &str) -> bool {
         for time_pair in times.iter() {
             if time_pair.0 < 24 && 
                 time_pair.1 < 24 {
-                return true;
-            } else {
-                return false;
+                    return true;
+                } else {
+                    return false;
             }
         }
         false
@@ -174,7 +176,7 @@ fn timing_format_correct(string_of_times: &str) -> bool {
 
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
 
-    
+
     let mut day_schedule = Vec::new();
 
     if &value != "" {
@@ -199,13 +201,13 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
     }
 
     match day {
-       Weekday::Monday(_) =>  Ok(Weekday::Monday(day_schedule)),
-       Weekday::Tuesday(_) => Ok(Weekday::Tuesday(day_schedule)),
-       Weekday::Wednesday(_) => Ok(Weekday::Wednesday(day_schedule)),
-       Weekday::Thursday(_) => Ok(Weekday::Thursday(day_schedule)),
-       Weekday::Friday(_) => Ok(Weekday::Friday(day_schedule)),
-       Weekday::Saturday(_) => Ok(Weekday::Saturday(day_schedule)),
-       Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
+        Weekday::Monday(_) =>  Ok(Weekday::Monday(day_schedule)),
+        Weekday::Tuesday(_) => Ok(Weekday::Tuesday(day_schedule)),
+        Weekday::Wednesday(_) => Ok(Weekday::Wednesday(day_schedule)),
+        Weekday::Thursday(_) => Ok(Weekday::Thursday(day_schedule)),
+        Weekday::Friday(_) => Ok(Weekday::Friday(day_schedule)),
+        Weekday::Saturday(_) => Ok(Weekday::Saturday(day_schedule)),
+        Weekday::Sunday(_) => Ok(Weekday::Sunday(day_schedule))
     }
 }
 
@@ -216,7 +218,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_clone = Arc::clone(&task);
 
     log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
-    
+
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -308,7 +310,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg("black")
                     .arg(&file)
                     .spawn().expect("no child");
-                        
+
                 let running_task = RunningTask::new(child, false, task_clone);
                 task_list_clone.lock().unwrap().push(running_task);
             });
@@ -341,7 +343,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .spawn().expect("no child");
 
                 let running_task = RunningTask::new(child, false, task_clone);
-                    task_list_clone.lock().unwrap().push(running_task);
+                task_list_clone.lock().unwrap().push(running_task);
             });
 
         },
@@ -371,7 +373,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_clone = Arc::clone(&task);
 
     log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
-    
+
     let looper = match task.lock().unwrap().auto_loop {
         Autoloop::Yes => Autoloop::Yes,
         Autoloop::No => Autoloop::No
@@ -492,8 +494,8 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg(&file)
                     .spawn().expect("no child");
 
-                    let running_task = RunningTask::new(child, false, task_clone);
-                    task_list_clone.lock().unwrap().push(running_task);
+                let running_task = RunningTask::new(child, false, task_clone);
+                task_list_clone.lock().unwrap().push(running_task);
             });
 
         },
@@ -504,8 +506,8 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .process_group(0)
                     .spawn().expect("no child");
 
-                    let running_task = RunningTask::new(child, false, task_clone);
-                    task_list_clone.lock().unwrap().push(running_task);
+                let running_task = RunningTask::new(child, false, task_clone);
+                task_list_clone.lock().unwrap().push(running_task);
             });
 
         }
@@ -516,43 +518,43 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
 }
 
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
-        if task_list.lock().unwrap().len() > 0 {
+    if task_list.lock().unwrap().len() > 0 {
 
-            let mut task = task_list.lock().unwrap().remove(0);
+        let mut task = task_list.lock().unwrap().remove(0);
 
-            log_info(format!("Kill Task: {:?}", task.child).as_str());
+        log_info(format!("Kill Task: {:?}", task.child).as_str());
 
-            task.child.kill().expect("command could not be killed");
-            
-            
+        task.child.kill().expect("command could not be killed");
 
-            if task.background == false {
-                // clears up any sub processes: particularly needed for "executable" 
-                // proctypes as anything spawned from a sub shell will likely have a different PID
-                let id = task.child.id();
-                let neg_id = format!("-{}", id.to_string());
-                let _kill_child = Command::new("kill")
-                    .arg("-TERM")
-                    .arg("--")
-                    .arg(neg_id)
-                    .output()
-                    .expect("Failed to remove child with kill command");
-                
-                // run background
-                if task.task.lock().unwrap().proc_type == ProcType::Audio {
-                    background::run(Arc::clone(&task_list), true);
-                } else {
-                    background::run(Arc::clone(&task_list), false);
-                }
 
+
+        if task.background == false {
+            // clears up any sub processes: particularly needed for "executable" 
+            // proctypes as anything spawned from a sub shell will likely have a different PID
+            let id = task.child.id();
+            let neg_id = format!("-{}", id.to_string());
+            let _kill_child = Command::new("kill")
+                .arg("-TERM")
+                .arg("--")
+                .arg(neg_id)
+                .output()
+                .expect("Failed to remove child with kill command");
+
+            // run background
+            if task.task.lock().unwrap().proc_type == ProcType::Audio {
+                background::run(Arc::clone(&task_list), true);
+            } else {
+                background::run(Arc::clone(&task_list), false);
             }
 
-            // wait for a second before stopping the task, to allow overlap
-            let one_sec = Duration::from_millis(1000);
-            thread::sleep(one_sec);
-
-            task.child.kill().expect("command could not be killed");
         }
+
+        // wait for a second before stopping the task, to allow overlap
+        let one_sec = Duration::from_millis(1000);
+        thread::sleep(one_sec);
+
+        task.child.kill().expect("command could not be killed");
+    }
 }
 
 struct App {
@@ -570,7 +572,7 @@ impl Default for App {
 
 
 fn main() -> Result<(), Box<dyn Error>> {
-    
+
     // initialise the app
     let app = App::default();
 
@@ -579,33 +581,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // this will mount all of the drives automatically using udisksctl
     let mounted_drives = identify_mounted_drives();
-    
-    if mounted_drives.len() == 1 {
-        // check to see if 'autoplay' dir exists
-        let mut drive_path = PathBuf::from(mounted_drives[0]);
-        drive_path.push("autoplay");
-        if drive_path.exists() {
-            // check if files are images or (audio/video) 
-            let files = fs::read_dir(&drive_path).unwrap();
-            if files.len() == 1 {
-                // use ffprobe to check file or just go for it with ffplay?
-            }
 
-        }
-    }
-    let username = whoami::username();
-    let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
-
-    if let Err(_) = dotenvy::from_path_override(env_dir_path.as_path()) {
-        eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
-        log_error("Cannot find env vars at path");
-        display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
-        process::exit(1)
-    }
-
+    // set up task vars
     let mut file = PathBuf::new();
     let mut slide_delay: u32 = 5;
-    let mut proc_type = String::with_capacity(10);
+    let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
     let mut schedule = AdvancedSchedule::No;
     let mut timings: Vec<Weekday> = Vec::with_capacity(7);
@@ -617,55 +597,92 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut saturday: Weekday = Weekday::Saturday(Vec::with_capacity(2));
     let mut sunday: Weekday = Weekday::Sunday(Vec::with_capacity(2));
 
-    for (key, value) in env::vars() {
-        match key.as_str() {
-            "MT_PROCTYPE" => proc_type.push_str(&value),
-            "MT_AUTOLOOP" => auto_loop = match value.as_str() {
-                "true" => Autoloop::Yes,
-                "false" => Autoloop::No,
-                &_ => Autoloop::No
-            },
-            "MT_FILE" => file.push(value.as_str()),
-            "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
-            "MT_SCHEDULE" => schedule = match value.as_str() {
-                "true" => AdvancedSchedule::Yes,
-                "false" => AdvancedSchedule::No,
-                &_ => AdvancedSchedule::No
-            },
-            "MT_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()), schedule.clone())?,
-            "MT_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()), schedule.clone())?,
-            "MT_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()), schedule.clone())?,
-            "MT_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()), schedule.clone())?,
-            "MT_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()), schedule.clone())?,
-            "MT_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()), schedule.clone())?,
-            "MT_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()), schedule.clone())?,
-            _ => {}
-        }
+
+    let mut drive_path = PathBuf::new();
+    if mounted_drives.len() == 1 {
+        // check to see if 'autoplay' dir exists
+        drive_path = PathBuf::from(&mounted_drives[0]);
+        drive_path.push("autoplay");
     }
+
+    if drive_path.exists() {
+        // check if files are images or (audio/video) 
+        let files = fs::read_dir(&drive_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
+        if files.len() == 1 {
+            // use ffprobe to check file or just go for it with ffplay?
+            // create task with video proc and autoplay it
+            file = files[0].path();
+            proc_type = ProcType::Video;
+            auto_loop = Autoloop::Yes;
+            schedule = AdvancedSchedule::No;
+
+        } else {
+            // multiple files are available so use slideshow proc
+            file = drive_path;
+            proc_type = ProcType::Slideshow;
+            schedule = AdvancedSchedule::No;
+        }
+
+    } else {
+
+        let username = whoami::username();
+        let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
+
+        if let Err(_) = dotenvy::from_path_override(env_dir_path.as_path()) {
+            eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
+            log_error("Cannot find env vars at path");
+            display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
+            process::exit(1)
+        }
+
+        for (key, value) in env::vars() {
+            match key.as_str() {
+                "MT_PROCTYPE" => { 
+                    proc_type = match value.as_str() {
+                        "video" => ProcType::Video,
+                        "audio" => ProcType::Audio,
+                        "image" => ProcType::Image,
+                        "slideshow" => ProcType::Slideshow,
+                        "browser" => ProcType::Browser,
+                        "executable" => ProcType::Executable,
+                        &_ => ProcType::Video
+                    }
+                },
+                "MT_AUTOLOOP" => auto_loop = match value.as_str() {
+                    "true" => Autoloop::Yes,
+                    "false" => Autoloop::No,
+                    &_ => Autoloop::No
+                },
+                "MT_FILE" => file.push(value.as_str()),
+                "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
+                "MT_SCHEDULE" => schedule = match value.as_str() {
+                    "true" => AdvancedSchedule::Yes,
+                    "false" => AdvancedSchedule::No,
+                    &_ => AdvancedSchedule::No
+                },
+                "MT_MONDAY" => monday = to_weekday(value, Weekday::Monday(Vec::new()), schedule.clone())?,
+                "MT_TUESDAY" => tuesday = to_weekday(value, Weekday::Tuesday(Vec::new()), schedule.clone())?,
+                "MT_WEDNESDAY" => wednesday = to_weekday(value, Weekday::Wednesday(Vec::new()), schedule.clone())?,
+                "MT_THURSDAY" => thursday = to_weekday(value, Weekday::Thursday(Vec::new()), schedule.clone())?,
+                "MT_FRIDAY" => friday = to_weekday(value, Weekday::Friday(Vec::new()), schedule.clone())?,
+                "MT_SATURDAY" => saturday = to_weekday(value, Weekday::Saturday(Vec::new()), schedule.clone())?,
+                "MT_SUNDAY" => sunday = to_weekday(value, Weekday::Sunday(Vec::new()), schedule.clone())?,
+                _ => {}
+            }
+        }
+        if false == file.clone().as_path().exists() {
+            display_error_with_message("Could not find file!");    
+        }
+    } 
 
     timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
-   
-    let timings_clone = timings.clone();
 
-    let proc_type = match proc_type.to_lowercase().as_str() {
-        "video" => ProcType::Video,
-        "audio" => ProcType::Audio,
-        "image" => ProcType::Image,
-        "slideshow" => ProcType::Slideshow,
-        "browser" => ProcType::Browser,
-        "executable" => ProcType::Executable,
-        &_ => ProcType::Video
-    };
-    
+    let timings_clone = timings.clone();
     let proc_type_clone = proc_type;
-    // check task elements here
-    // does the file exist? 
-    if false == file.as_path().exists() {
-        display_error_with_message("Could not find file!");    
-    }
+    
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay)));
-    
+
     // set up scheduler
     let mut scheduler = Scheduler::new();
     if schedule == AdvancedSchedule::Yes {
@@ -676,9 +693,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             let _run_background = background::run(Arc::clone(&app.task_list), false);
         }
-       // use the full scheduler and run the task at certain times
-       for day in timings_clone.iter() {
-           let day_name = match day {
+        // use the full scheduler and run the task at certain times
+        for day in timings_clone.iter() {
+            let day_name = match day {
                 Weekday::Monday(_) => Interval::Monday,
                 Weekday::Tuesday(_) => Interval::Tuesday,
                 Weekday::Wednesday(_) => Interval::Wednesday,
@@ -686,9 +703,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Weekday::Friday(_) => Interval::Friday, 
                 Weekday::Saturday(_) => Interval::Saturday, 
                 Weekday::Sunday(_) => Interval::Sunday 
-      
-           };
-           let timing_vec = match day {
+
+            };
+            let timing_vec = match day {
                 Weekday::Monday(t) => t,
                 Weekday::Tuesday(t) => t,
                 Weekday::Wednesday(t) => t,
@@ -696,83 +713,83 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Weekday::Friday(t) => t, 
                 Weekday::Saturday(t) => t, 
                 Weekday::Sunday(t) => t 
-           };
-           
-           fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
-               let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
-               // function must return a date format string
-               if i.len() == 2 {
-                   (i[0], i[1], 0 as u32) 
+            };
+
+            fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
+                let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+                // function must return a date format string
+                if i.len() == 2 {
+                    (i[0], i[1], 0 as u32) 
                 } else {
-                   (i[0], i[1], i[2]) 
+                    (i[0], i[1], i[2]) 
                 }
-           }
-        
-           // iterates through each timing for the day
+            }
+
+            // iterates through each timing for the day
             for timing in timing_vec.iter() {
-               let task_clone = Arc::clone(&task);
-               let task_list_clone = Arc::clone(&app.task_list);
-               let task_list_clone_2 = Arc::clone(&app.task_list);
+                let task_clone = Arc::clone(&task);
+                let task_list_clone = Arc::clone(&app.task_list);
+                let task_list_clone_2 = Arc::clone(&app.task_list);
 
                 // check if day is today 
-               let local = Local::now();
-               let day_today = format!("{}", local.format("%A"));
+                let local = Local::now();
+                let day_today = format!("{}", local.format("%A"));
 
-               
-               let timing_day = day.as_str();
-               if day_today.to_lowercase() == timing_day.to_lowercase() {
-                   let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
-                   let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>().unwrap()).collect::<Vec<u32>>();
-                   let year_num = date_nums[0] as i32;
-                   let month_num = date_nums[1];
-                   let day_num = date_nums[2];
-                   let _hour_num = date_nums[3];
-                   let _min_num = date_nums[4];
-                   let _sec_num = date_nums[5];
 
-                   let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
+                let timing_day = day.as_str();
+                if day_today.to_lowercase() == timing_day.to_lowercase() {
+                    let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
+                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+                    let year_num = date_nums[0] as i32;
+                    let month_num = date_nums[1];
+                    let day_num = date_nums[2];
+                    let _hour_num = date_nums[3];
+                    let _min_num = date_nums[4];
+                    let _sec_num = date_nums[5];
 
-                   let start_time = Local.with_ymd_and_hms(
-                       year_num, month_num, day_num, 
-                       start_hour, start_min, start_sec).unwrap();
+                    let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
 
-                   let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
+                    let start_time = Local.with_ymd_and_hms(
+                        year_num, month_num, day_num, 
+                        start_hour, start_min, start_sec).unwrap();
 
-                   let end_time = Local.with_ymd_and_hms(
-                       year_num, month_num, day_num, 
-                       end_hour, end_min, end_sec).unwrap();
+                    let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
+
+                    let end_time = Local.with_ymd_and_hms(
+                        year_num, month_num, day_num, 
+                        end_hour, end_min, end_sec).unwrap();
 
 
                     let local_timestamp = local.timestamp(); 
-                   // if &timing.0 is less 
-                   if local_timestamp > start_time.timestamp() && local_timestamp < end_time.timestamp() {
+                    // if &timing.0 is less 
+                    if local_timestamp > start_time.timestamp() && local_timestamp < end_time.timestamp() {
 
                         let task_list_clone_3 = Arc::clone(&app.task_list);
                         let task_clone_2 = Arc::clone(&task);
                         run_task(task_list_clone_3.clone(), task_clone_2.clone());
-                   }
-               }
+                    }
+                }
 
-               scheduler.every(day_name)
-                   .at(&timing.0)
-                   .run(move || run_task(task_list_clone.clone(), task_clone.clone()));
+                scheduler.every(day_name)
+                    .at(&timing.0)
+                    .run(move || run_task(task_list_clone.clone(), task_clone.clone()));
 
                 scheduler.every(day_name)
                     .at(&timing.1)
                     .run(move || stop_task(task_list_clone_2.clone()));
-            }
-       }
-       loop {
-           scheduler.run_pending();
-           thread::sleep(Duration::from_millis(10));
-       }
-   } else {
-       // run the task now
-       let task_clone = Arc::clone(&task); 
-       let task_list_clone = Arc::clone(&app.task_list);
-       let _task_aut = run_task(task_list_clone, task_clone);
-       loop {}
-  }
+                }
+        }
+        loop {
+            scheduler.run_pending();
+            thread::sleep(Duration::from_millis(10));
+        }
+    } else {
+        // run the task now
+        let task_clone = Arc::clone(&task); 
+        let task_list_clone = Arc::clone(&app.task_list);
+        let _task_aut = run_task(task_list_clone, task_clone);
+        loop {}
+    }
 }
 
 #[cfg(test)]
