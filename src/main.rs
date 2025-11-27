@@ -578,8 +578,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     setup_logger();
 
     // this will mount all of the drives automatically using udisksctl
-    let _mount_drives = identify_mounted_drives();
+    let mounted_drives = identify_mounted_drives();
+    
+    if mounted_drives.len() == 1 {
+        // check to see if 'autoplay' dir exists
+        let mut drive_path = PathBuf::from(mounted_drives[0]);
+        drive_path.push("autoplay");
+        if drive_path.exists() {
+            // check if files are images or (audio/video) 
+            let files = fs::read_dir(&drive_path).unwrap();
+            if files.len() == 1 {
+                // use ffprobe to check file or just go for it with ffplay?
+            }
 
+        }
+    }
     let username = whoami::username();
     let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
 
