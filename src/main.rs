@@ -610,7 +610,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let files = fs::read_dir(&drive_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
         if files.len() == 1 {
             // use ffprobe to check file or just go for it with ffplay?
-            // ffprobe -hide_banner -show_entries stream=codec_type FILE
             // The regex responds to the first match, which in this case is "video" for a video 
             // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
             let probe_text = Command::new("ffprobe")
