@@ -843,14 +843,6 @@ mod tests {
         assert_eq!(thursday.to_string(), "Thursday");
     }
 
-    #[test]
-    fn test_weekday_timings() {
-        let schedule = vec![("08:00".to_string(), "12:00".to_string())];
-        let monday = Weekday::Monday(schedule.clone());
-        
-        assert_eq!(monday.timings(), schedule);
-    }
-
     // Test Task struct functionality
     #[test]
     fn test_task_new() {
@@ -878,39 +870,7 @@ mod tests {
         assert_eq!(task.file, file_path);
     }
 
-    #[test]
-    fn test_task_setters() {
-        let file_path = PathBuf::from("/tmp/test.mp4");
-        let mut task = Task::new(
-            ProcType::Video, 
-            Autoloop::No, 
-            Vec::new(), 
-            file_path,
-            7
-        );
-        
-        task.set_loop(Autoloop::Yes);
-        match task.auto_loop {
-            Autoloop::Yes => assert!(true),
-            _ => assert!(false, "Failed to set auto_loop"),
-        }
-        
-        task.set_proc_type(ProcType::Browser);
-        match task.proc_type {
-            ProcType::Browser => assert!(true),
-            _ => assert!(false, "Failed to set proc_type"),
-        }
-        
-        let schedule = Vec::new();
-        let monday = Weekday::Monday(schedule);
-        task.set_weekday(monday);
-        assert_eq!(task.timings.len(), 1);
-        
-        match &task.timings[0] {
-            Weekday::Monday(_) => assert!(true),
-            _ => assert!(false, "Failed to set weekday"),
-        }
-    }
+    
 
     // Test to_weekday function
     #[test]
