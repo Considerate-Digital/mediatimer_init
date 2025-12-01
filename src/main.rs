@@ -610,9 +610,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         let files = fs::read_dir(&drive_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
         if files.len() == 1 {
             // use ffprobe to check file or just go for it with ffplay?
+            // ffprobe -hide_banner -show_entries stream=codec_type FILE
+            // The regex responds to the first match, which in this case is "video" for a video 
+            // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
+            let probe_text = Command::new("ffprobe")
+                .arg("-hide_banner")
+                .arg("-show_entries")
+                .arg("stream=codec_type")
+                .arg(&files[0].path())
+                .output()
+                .expect("ffprobe failed to find media");
+            let probe_string = String::from_utf8_lossy(&probe_text.stdout);
+            let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
+            let media_captures = media_re.captures(&probe_string).unwrap();
+            let media_type = media_captures.name("media").unwrap().as_str();
+
+            proc_type = match media_type {
+                "video" => ProcType::Video,
+                "audio" => ProcType::Audio,
+                &_ => ProcType::Video
+            };
+
             // create task with video proc and autoplay it
             file = files[0].path();
-            proc_type = ProcType::Video;
             auto_loop = Autoloop::Yes;
             schedule = AdvancedSchedule::No;
 
