@@ -187,6 +187,12 @@ fn timing_format_correct(string_of_times: &str) -> bool {
     }
 }
 
+fn url_format_correct(url: &str) -> bool {
+        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$").unwrap();
+        re.is_match(url)
+    }
+
+
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
 
 
@@ -656,7 +662,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut autoplay_path = PathBuf::new();
     let mut url_path = PathBuf::new();
     if mounted_drives.len() == 1 {
-        // check to see if 'autoplay' dir exists
         autoplay_path = PathBuf::from(&mounted_drives[0]);
         autoplay_path.push("autoplay");
         url_path = autoplay_path.clone();
@@ -701,8 +706,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         fn is_dirname(path: &Path, name: &str) -> bool {
             if path.exists() {
                 if path.is_dir() {
-                    path.to_str()
-                        .map_or(false, |n| n.to_lowercase() == name)
+                    path.iter()
+                        .any(|n| n.to_ascii_lowercase() == name)
                 } else {
                     false
                 }
@@ -715,12 +720,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             let file = fs::File::open(&url_path).expect("Failed to open URL file");
             let reader = BufReader::new(file);
             let lines: Vec<String> = reader.lines().into_iter().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            // check if line contains url
+            // TODO check if line contains url
+            
+            // TODO check url is valid
+            if lines.len() > 0 && url_format_correct(&lines[0]) {
+                web_url = lines[0].clone();
+                proc_type = ProcType::Web;
+                schedule = AdvancedSchedule::No;
+            } else {
+                //TODO error message
+                log_error("URL format incorrect");
+                display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
 
-            web_url = lines[0].clone();
-            proc_type = ProcType::Web;
-            schedule = AdvancedSchedule::No;
-
+            }
+            
         } else if is_dirname(autoplay_path.as_path(), "autoplay") {
             // check if files are images or (audio/video) 
             let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
