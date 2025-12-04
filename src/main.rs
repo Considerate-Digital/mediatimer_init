@@ -14,7 +14,13 @@ use std::{
     fs::{
         DirEntry
     },
-    fs
+    fs,
+    io::{
+        Error as IoError,
+        Read, 
+        BufRead, 
+        BufReader
+    },
 
 };
 use strum::Display;
@@ -648,12 +654,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
     let mut autoplay_path = PathBuf::new();
+    let mut url_path = PathBuf::new();
     if mounted_drives.len() == 1 {
         // check to see if 'autoplay' dir exists
         autoplay_path = PathBuf::from(&mounted_drives[0]);
         autoplay_path.push("autoplay");
-        let mut url_path = autoplay_path.clone();
+        url_path = autoplay_path.clone();
         url_path.push("url.mt");
+    }
 
         fn is_filename(entry: &Path, name: &str) -> bool {
             let mut entry = entry.to_path_buf();
@@ -665,33 +673,51 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         fn dir_contains_url(path: Box<Path>) -> bool {
-            let mut url_exists = false;
-            // read the directory
-            for entry in path.read_dir().expect("read_dir call failed") {
-                if let Ok(entry) = entry {
-                    let entry_is_filename = is_filename(&entry.path(), "url"); 
-                    if entry_is_filename {
-                        // rename the entry to comply with our suffix
-                        let mut entry_path = entry.path();
-                        entry_path.set_file_name("url");
-                        entry_path.set_extension("mt");
-                        url_exists = true;
+            if path.exists() {
+                let mut url_exists = false;
+                // read the directory
+                for entry in path.read_dir().expect("read_dir call failed") {
+                    if let Ok(entry) = entry {
+                        let entry_is_filename = is_filename(&entry.path(), "url"); 
+                        if entry_is_filename {
+                            // rename the entry to comply with our suffix
+                            let original_name = entry.path();
+                            let mut entry_path = entry.path();
+                            entry_path.set_file_name("url");
+                            entry_path.set_extension("mt");
+                            // rename the file
+                            fs::rename(original_name, entry_path);
+
+                            url_exists = true;
+                        }
                     }
                 }
-            }
-            url_exists
-        }
-
-        fn is_dirname(path: &Path, name: &str) -> bool {
-            if path.exists() && path.is_dir() {
-                path.to_str()
-                    .map_or(false, |n| n.to_lowercase() == name)
+                url_exists
             } else {
                 false
             }
         }
-        if  dir_contains_url(autoplay_path.clone().into_boxed_path()) {
-            web_url = url_path.to_string_lossy().to_string();
+
+        fn is_dirname(path: &Path, name: &str) -> bool {
+            if path.exists() {
+                if path.is_dir() {
+                    path.to_str()
+                        .map_or(false, |n| n.to_lowercase() == name)
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        if dir_contains_url(autoplay_path.clone().into_boxed_path()) {
+            // read the file at url_path
+            let file = fs::File::open(&url_path).expect("Failed to open URL file");
+            let reader = BufReader::new(file);
+            let lines: Vec<String> = reader.lines().into_iter().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
+            // check if line contains url
+
+            web_url = lines[0].clone();
             proc_type = ProcType::Web;
             schedule = AdvancedSchedule::No;
 
@@ -732,7 +758,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 schedule = AdvancedSchedule::No;
             }
 
-        }
     } else {
 
         let username = whoami::username();
@@ -753,6 +778,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         "audio" => ProcType::Audio,
                         "image" => ProcType::Image,
                         "slideshow" => ProcType::Slideshow,
+                        "web" => ProcType::Web,
                         "browser" => ProcType::Browser,
                         "executable" => ProcType::Executable,
                         &_ => ProcType::Video
