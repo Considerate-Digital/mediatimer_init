@@ -2,7 +2,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
     time::Duration,
-    path::{PathBuf},
+    path::{Path, PathBuf},
     env,
     error::Error,
     process,
@@ -11,6 +11,9 @@ use std::{
         Child
     },
     os::unix::process::CommandExt,
+    fs::{
+        DirEntry
+    },
     fs
 
 };
@@ -52,6 +55,7 @@ pub enum ProcType {
     Audio,
     Image,
     Slideshow,
+    Web,
     Browser,
     Executable,
 }
@@ -109,17 +113,19 @@ struct Task {
     auto_loop: Autoloop,
     timings: Timings,
     file: PathBuf,
-    slide_delay: u32
+    slide_delay: u32,
+    web_url: String
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, slide_delay: u32) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, slide_delay: u32, web_url: String) -> Self {
         Task {
             proc_type,
             auto_loop,
             timings,
             file,
-            slide_delay
+            slide_delay,
+            web_url
         }
     }
     fn background() -> Self {
@@ -128,7 +134,8 @@ impl Task {
             auto_loop: Autoloop::Yes,
             timings: Vec::with_capacity(0),
             file: PathBuf::from("/"),
-            slide_delay: 5
+            slide_delay: 5,
+            web_url: String::with_capacity(0)
         }
     }
 }
@@ -225,6 +232,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     };
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
+    let web_url = task.lock().unwrap().web_url.clone();
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
@@ -329,6 +337,25 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
+        ProcType::Web => {
+            thread::spawn(move || {
+                let child = Command::new("chromium")
+                    //.arg("--user-data-dir=/tmp/chromium/")
+                    //.arg("--disable-session-crashed-bubble")
+                    .arg("--disable-infobars")
+                    //.arg("--kiosk")
+                    .arg("--incognito")
+                    .arg("--start-fullscreen")
+                    .arg("--start-maximized")
+                    .arg(&web_url)
+                    .spawn().expect("no child");
+
+                let running_task = RunningTask::new(child, false, task_clone);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+
+        },
+
         ProcType::Browser => {
             thread::spawn(move || {
                 let child = Command::new("chromium")
@@ -380,6 +407,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     };
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
+    let web_url= task.lock().unwrap().web_url.clone();
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
@@ -481,6 +509,26 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
+        ProcType::Web => {
+            thread::spawn(move || {
+                let child = Command::new("chromium")
+                    //.arg("--user-data-dir=/tmp/chromium/")
+                    //.arg("--disable-session-crashed-bubble")
+                    .arg("--disable-infobars")
+                    //.arg("--kiosk")
+                    .arg("--incognito")
+                    .arg("--start-fullscreen")
+                    .arg("--start-maximized")
+                    .arg(&web_url)
+                    .spawn().expect("no child");
+
+                let running_task = RunningTask::new(child, false, task_clone);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+
+        },
+
+
         ProcType::Browser => {
             thread::spawn(move || {
                 let child = Command::new("chromium")
@@ -584,6 +632,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // set up task vars
     let mut file = PathBuf::new();
+    let mut web_url = String::with_capacity(0);
     let mut slide_delay: u32 = 5;
     let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
@@ -598,50 +647,92 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut sunday: Weekday = Weekday::Sunday(Vec::with_capacity(2));
 
 
-    let mut drive_path = PathBuf::new();
+    let mut autoplay_path = PathBuf::new();
     if mounted_drives.len() == 1 {
         // check to see if 'autoplay' dir exists
-        drive_path = PathBuf::from(&mounted_drives[0]);
-        drive_path.push("autoplay");
-    }
+        autoplay_path = PathBuf::from(&mounted_drives[0]);
+        autoplay_path.push("autoplay");
+        let mut url_path = autoplay_path.clone();
+        url_path.push("url.mt");
 
-    if drive_path.exists() {
-        // check if files are images or (audio/video) 
-        let files = fs::read_dir(&drive_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
-        if files.len() == 1 {
-            // use ffprobe to check file or just go for it with ffplay?
-            // The regex responds to the first match, which in this case is "video" for a video 
-            // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
-            let probe_text = Command::new("ffprobe")
-                .arg("-hide_banner")
-                .arg("-show_entries")
-                .arg("stream=codec_type")
-                .arg(&files[0].path())
-                .output()
-                .expect("ffprobe failed to find media");
-            let probe_string = String::from_utf8_lossy(&probe_text.stdout);
-            let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
-            let media_captures = media_re.captures(&probe_string).unwrap();
-            let media_type = media_captures.name("media").unwrap().as_str();
-
-            proc_type = match media_type {
-                "video" => ProcType::Video,
-                "audio" => ProcType::Audio,
-                &_ => ProcType::Video
-            };
-
-            // create task with video proc and autoplay it
-            file = files[0].path();
-            auto_loop = Autoloop::Yes;
-            schedule = AdvancedSchedule::No;
-
-        } else {
-            // multiple files are available so use slideshow proc
-            file = drive_path;
-            proc_type = ProcType::Slideshow;
-            schedule = AdvancedSchedule::No;
+        fn is_filename(entry: &Path, name: &str) -> bool {
+            let mut entry = entry.to_path_buf();
+            entry.set_extension("");
+            entry
+                .file_name().unwrap()
+                .to_str()
+                .map_or(false, |n| n.to_lowercase() == name)
         }
 
+        fn dir_contains_url(path: Box<Path>) -> bool {
+            let mut url_exists = false;
+            // read the directory
+            for entry in path.read_dir().expect("read_dir call failed") {
+                if let Ok(entry) = entry {
+                    let entry_is_filename = is_filename(&entry.path(), "url"); 
+                    if entry_is_filename {
+                        // rename the entry to comply with our suffix
+                        let mut entry_path = entry.path();
+                        entry_path.set_file_name("url");
+                        entry_path.set_extension("mt");
+                        url_exists = true;
+                    }
+                }
+            }
+            url_exists
+        }
+
+        fn is_dirname(path: &Path, name: &str) -> bool {
+            if path.exists() && path.is_dir() {
+                path.to_str()
+                    .map_or(false, |n| n.to_lowercase() == name)
+            } else {
+                false
+            }
+        }
+        if  dir_contains_url(autoplay_path.clone().into_boxed_path()) {
+            web_url = url_path.to_string_lossy().to_string();
+            proc_type = ProcType::Web;
+            schedule = AdvancedSchedule::No;
+
+        } else if is_dirname(autoplay_path.as_path(), "autoplay") {
+            // check if files are images or (audio/video) 
+            let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
+            if files.len() == 1 {
+                // use ffprobe to check file or just go for it with ffplay?
+                // The regex responds to the first match, which in this case is "video" for a video 
+                // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
+                let probe_text = Command::new("ffprobe")
+                    .arg("-hide_banner")
+                    .arg("-show_entries")
+                    .arg("stream=codec_type")
+                    .arg(&files[0].path())
+                    .output()
+                    .expect("ffprobe failed to find media");
+                let probe_string = String::from_utf8_lossy(&probe_text.stdout);
+                let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
+                let media_captures = media_re.captures(&probe_string).unwrap();
+                let media_type = media_captures.name("media").unwrap().as_str();
+
+                proc_type = match media_type {
+                    "video" => ProcType::Video,
+                    "audio" => ProcType::Audio,
+                    &_ => ProcType::Video
+                };
+
+                // create task with video proc and autoplay it
+                file = files[0].path();
+                auto_loop = Autoloop::Yes;
+                schedule = AdvancedSchedule::No;
+
+            } else {
+                // multiple files are available so use slideshow proc
+                file = autoplay_path;
+                proc_type = ProcType::Slideshow;
+                schedule = AdvancedSchedule::No;
+            }
+
+        }
     } else {
 
         let username = whoami::username();
@@ -673,6 +764,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     &_ => Autoloop::No
                 },
                 "MT_FILE" => file.push(value.as_str()),
+                "MT_URL" => web_url.push_str(value.as_str()),
                 "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
                 "MT_SCHEDULE" => schedule = match value.as_str() {
                     "true" => AdvancedSchedule::Yes,
@@ -700,7 +792,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let proc_type_clone = proc_type;
     
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay, web_url)));
 
     // set up scheduler
     let mut scheduler = Scheduler::new();
