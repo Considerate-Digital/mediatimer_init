@@ -820,8 +820,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
-        if false == file.clone().as_path().exists() {
-            display_error_with_message("Could not find file!");    
+        // every ProcType requires a file, except Web
+        if proc_type != ProcType::Web {
+            if false == file.clone().as_path().exists() {
+                display_error_with_message("Could not find file!");    
+            }
         }
     } 
 
