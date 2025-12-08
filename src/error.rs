@@ -21,7 +21,7 @@ use ratatui::{
     }
 };
 
-
+#[allow(dead_code)]
 pub fn error() {
     let mut terminal = ratatui::init();
     let _error_widget = ErrorTerm::default().run(&mut terminal);
@@ -84,7 +84,7 @@ impl Default for ErrorTerm {
 
 impl Widget for &ErrorTerm {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let mut lines = Vec::with_capacity(20);
+        let lines;
 
         if self.message != "" {
             lines = vec![

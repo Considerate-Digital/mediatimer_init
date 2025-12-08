@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use log::{info, warn, error, LevelFilter};
 
 use systemd_journal_logger::JournalLog;
@@ -11,6 +12,7 @@ pub fn log_info(message: &str) {
    info!("{}", message); 
 }
 
+#[allow(dead_code)]
 pub fn log_warn(message: &str) {
     warn!("{}", message);
 }

@@ -11,13 +11,8 @@ use std::{
         Child
     },
     os::unix::process::CommandExt,
-    fs::{
-        DirEntry
-    },
     fs,
     io::{
-        Error as IoError,
-        Read, 
         BufRead, 
         BufReader
     },
@@ -52,7 +47,6 @@ use crate::mount::identify_mounted_drives;
 mod background;
 
 mod error;
-use crate::error::error as display_error;
 use crate::error::error_with_message as display_error_with_message;
 
 #[derive(Debug,Clone, Copy, PartialEq)]
@@ -81,7 +75,6 @@ pub enum AdvancedSchedule {
 
 
 type Schedule = Vec<(String, String)>;
-type Timings = Vec<Weekday>;
 
 #[derive(Display, Debug, Clone)]
 pub enum Weekday {
@@ -117,18 +110,16 @@ impl Weekday {
 struct Task {
     proc_type: ProcType,
     auto_loop: Autoloop,
-    timings: Timings,
     file: PathBuf,
     slide_delay: u32,
     web_url: String
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, slide_delay: u32, web_url: String) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, file: PathBuf, slide_delay: u32, web_url: String) -> Self {
         Task {
             proc_type,
             auto_loop,
-            timings,
             file,
             slide_delay,
             web_url
@@ -138,7 +129,6 @@ impl Task {
         Task {
             proc_type: ProcType::Video,
             auto_loop: Autoloop::Yes,
-            timings: Vec::with_capacity(0),
             file: PathBuf::from("/"),
             slide_delay: 5,
             web_url: String::with_capacity(0)
@@ -602,9 +592,9 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
 
             // run background
             if task.task.lock().unwrap().proc_type == ProcType::Audio {
-                background::run(Arc::clone(&task_list), true);
+                background::run(Arc::clone(&task_list));
             } else {
-                background::run(Arc::clone(&task_list), false);
+                background::run(Arc::clone(&task_list));
             }
 
         }
@@ -649,7 +639,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
     let mut schedule = AdvancedSchedule::No;
-    let mut timings: Vec<Weekday> = Vec::with_capacity(7);
+    let timings;
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
     let mut tuesday: Weekday = Weekday::Tuesday(Vec::with_capacity(2));
     let mut wednesday: Weekday = Weekday::Wednesday(Vec::with_capacity(2));
@@ -691,9 +681,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                             entry_path.set_file_name("url");
                             entry_path.set_extension("mt");
                             // rename the file
-                            fs::rename(original_name, entry_path);
-
-                            url_exists = true;
+                            if let Ok(_) = fs::rename(original_name, entry_path) {
+                                url_exists = true;
+                            } else {
+                                //display error
+                                display_error_with_message("Failed to rename file containing URL. Please check permissions.");
+                            }
                         }
                     }
                 }
@@ -834,7 +827,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let proc_type_clone = proc_type;
     
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay, web_url)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, file, slide_delay, web_url)));
 
     // set up scheduler
     let mut scheduler = Scheduler::new();
@@ -842,9 +835,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         // create then start the background after the task is created
         let _create_background = background::make(proc_type_clone);
         if proc_type == ProcType::Audio { 
-            let _run_background = background::run(Arc::clone(&app.task_list), true);
+            let _run_background = background::run(Arc::clone(&app.task_list));
         } else {
-            let _run_background = background::run(Arc::clone(&app.task_list), false);
+            let _run_background = background::run(Arc::clone(&app.task_list));
         }
         // use the full scheduler and run the task at certain times
         for day in timings_clone.iter() {

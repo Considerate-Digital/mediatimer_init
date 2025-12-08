@@ -1,11 +1,8 @@
 use std::{
-    error::Error,
     process::{
         Command,
         Stdio
     },
-    thread,
-    time::Duration
 };
 
 use regex::Regex;
@@ -27,23 +24,6 @@ enum Usb {
 }
 
 impl Usb {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Usb::SDA1 => "sda1", 
-            Usb::SDA2 => "sda2", 
-            Usb::SDA3 => "sda3", 
-            Usb::SDA4 => "sda4",
-            Usb::SDB1 => "sdb1", 
-            Usb::SDB2 => "sdb2", 
-            Usb::SDB3 => "sdb3",
-            Usb::SDB4 => "sdb4",
-            Usb::SDC1 => "sdc1",
-            Usb::SDC2 => "sdc2",
-            Usb::SDC3 => "sdc3",
-            Usb::SDC4 => "sdc4",
-            Usb::UNKNOWN => ""
-        }
-    }
     fn as_device_path(&self) -> &'static str {
         match self {
             Usb::SDA1 => "/dev/sda1", 
