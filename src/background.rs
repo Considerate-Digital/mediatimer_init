@@ -9,7 +9,6 @@ use std::{
 
 use crate::RunningTask;
 use crate::ProcType;
-use crate::Task;
 
 use crate::error::error_with_message as display_error_with_message;
 
@@ -55,7 +54,6 @@ pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>) {
     let username = whoami::username();
     let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/black.mp4"].iter().collect();
 
-    let background_task = Task::background();
     if let Some(path_str) = env_dir_path.to_str() {
         let child = Command::new("ffplay")
             .arg("-hide_banner")
@@ -67,7 +65,7 @@ pub fn run(task_list: Arc<Mutex<Vec<RunningTask>>>) {
             .arg(path_str)
             .spawn()
             .expect("no child");
-        let running_task = RunningTask::new(child, true, Arc::new(Mutex::new(background_task)));
+        let running_task = RunningTask::new(child, true);
         task_list.lock().unwrap().push(running_task);
     } else {
         display_error_with_message("Unable to locate config");

@@ -20,7 +20,7 @@ enum Usb {
     SDC2,
     SDC3,
     SDC4,
-    UNKNOWN
+    Unknown
 }
 
 impl Usb {
@@ -38,7 +38,7 @@ impl Usb {
             Usb::SDC2 => "/dev/sdc2",
             Usb::SDC3 => "/dev/sdc3",
             Usb::SDC4 => "/dev/sdc4",
-            Usb::UNKNOWN => ""
+            Usb::Unknown => ""
         }
 
     }
@@ -56,11 +56,11 @@ pub fn identify_mounted_drives() -> Vec<String> {
 
     let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
     
+    let re = Regex::new(r"sd[a,b,c][1-4]").unwrap();
     for line in all_drives_string.lines() {
-        let re = Regex::new(r"sd[a,b,c][1-4]").unwrap();
         if re.is_match(line) {
             let drive_info = line.split(' ')
-                .filter(|d| *d != "" )
+                .filter(|d| !d.is_empty() )
                 .collect::<Vec<_>>();
                 if drive_info[1] == "1" { 
                     
@@ -80,13 +80,13 @@ pub fn identify_mounted_drives() -> Vec<String> {
                         "sdc2" => Usb::SDC2,
                         "sdc3" => Usb::SDC3,
                         "sdc4" => Usb::SDC4,
-                        &_ => Usb::UNKNOWN
+                        &_ => Usb::Unknown
 
                     };
     
 
                 // check if device mounted
-                let udc_info = Command::new("udisksctl")
+                let mut udc_info = Command::new("udisksctl")
                     .arg("info")
                     .arg("-b")
                     .arg(drive.as_device_path())
@@ -94,23 +94,24 @@ pub fn identify_mounted_drives() -> Vec<String> {
                     .spawn()
                     .expect("Failed to get info on usb disks");
 
-                let udc_info = udc_info.stdout.expect("Failed to open udc-info stdout");
+                let pipe = udc_info.stdout.take().unwrap();
 
                 let udc_m_grep = Command::new("grep")
                     .arg("MountPoints")
-                    .stdin(Stdio::from(udc_info))
+                    .stdin(pipe)
                     .stdout(Stdio::piped())
                     .spawn()
                     .expect("Failed to grep the udisksctl output");
 
                 let udc_mounted_output = udc_m_grep.wait_with_output().expect("Failed to wait on grep");
+                let _ = udc_info.wait();
 
 
                 let udc_mounted_output = String::from_utf8_lossy(&udc_mounted_output.stdout);
                 
                 let mount_info = udc_mounted_output.split(" ")
                     .map(|x| x.trim())
-                    .filter(|d| *d != "")
+                    .filter(|d| !d.is_empty() )
                     .collect::<Vec<_>>();
 
                 // if the previous step has revealed that the partition is not mounted expect a 
@@ -128,14 +129,12 @@ pub fn identify_mounted_drives() -> Vec<String> {
 
                     let mounted_drive_info = udc_output.split(" ")
                         .map(|x| x.trim())
-                        .filter(|d| *d != "")
+                        .filter(|d| !d.is_empty() )
                         .collect::<Vec<_>>();
         
                     // this will be a vector with four parts
-                    if mounted_drive_info.len() == 4 {
-                        if mounted_drive_info[3] != "" {
-                            mounts.push(String::from(mounted_drive_info[3]));
-                        }
+                    if mounted_drive_info.len() == 4 && !mounted_drive_info[3].is_empty() {
+                        mounts.push(String::from(mounted_drive_info[3]));
                     }
 
                 } else if mount_info.len() == 2 {

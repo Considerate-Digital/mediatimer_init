@@ -36,6 +36,7 @@ pub fn error_with_message(message: &str) {
     process::exit(1);
 }
 
+#[derive(Default)]
 struct ErrorTerm {
     should_exit: bool,
     message: String
@@ -73,20 +74,20 @@ impl ErrorTerm {
 
 }
 
-impl Default for ErrorTerm {
-    fn default() -> ErrorTerm {
-        ErrorTerm {
-            should_exit: false,
-            message: String::new()
-        }
-    }
-}
+
 
 impl Widget for &ErrorTerm {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let lines;
-
-        if self.message != "" {
+        let mut lines = vec![
+                Line::raw(""),
+                Line::raw("Media Timer could not be started."),
+                Line::raw(""),
+                Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
+                Line::raw(""),
+                Line::raw("Or manually edit the Media Timer config file at"),
+                Line::raw("/home/adaptable/.mediatimer_config/vars"),
+        ];
+        if !self.message.is_empty() {
             lines = vec![
                 Line::raw(""),
                 Line::raw("Media Timer could not be started."),
@@ -96,17 +97,6 @@ impl Widget for &ErrorTerm {
                 Line::raw("To reset the program run 'mediatimer' in a terminal."),
                 Line::raw(""),
                 Line::raw("Or manually edit the mediatimer config file at"),
-                Line::raw("/home/adaptable/.mediatimer_config/vars"),
-            ];
-
-        } else {
-            lines = vec![
-                Line::raw(""),
-                Line::raw("Media Timer could not be started."),
-                Line::raw(""),
-                Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
-                Line::raw(""),
-                Line::raw("Or manually edit the Media Timer config file at"),
                 Line::raw("/home/adaptable/.mediatimer_config/vars"),
             ];
         }
