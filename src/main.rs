@@ -207,7 +207,6 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
 fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
-    let task_clone = Arc::clone(&task);
 
     log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
 
