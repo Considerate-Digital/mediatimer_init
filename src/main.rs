@@ -682,15 +682,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             let file = fs::File::open(&url_path).expect("Failed to open URL file");
             let reader = BufReader::new(file);
             let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            // TODO check if line contains url
-            
-            // TODO check url is valid
+
             if !lines.is_empty() && url_format_correct(&lines[0]) {
                 web_url = lines[0].clone();
                 proc_type = ProcType::Web;
                 schedule = AdvancedSchedule::No;
             } else {
-                //TODO error message
                 log_error("URL format incorrect");
                 display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
 
