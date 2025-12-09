@@ -3,6 +3,13 @@ use std::{
         Command,
         Stdio
     },
+    path::{
+        PathBuf
+    },
+    io::{
+        Error,
+        ErrorKind
+    }
 };
 
 use regex::Regex;
@@ -40,11 +47,10 @@ impl Usb {
             Usb::SDC4 => "/dev/sdc4",
             Usb::Unknown => ""
         }
-
     }
-
 }
-pub fn identify_mounted_drives() -> Vec<String> {
+
+pub fn identify_mounted_drives() -> Vec<PathBuf> {
     let mut mounts = Vec::with_capacity(2);
     // find out if any drives mounted, otherwise default to /home/username
     let all_drives = Command::new("lsblk")
@@ -134,11 +140,11 @@ pub fn identify_mounted_drives() -> Vec<String> {
         
                     // this will be a vector with four parts
                     if mounted_drive_info.len() == 4 && !mounted_drive_info[3].is_empty() {
-                        mounts.push(String::from(mounted_drive_info[3]));
+                        mounts.push(PathBuf::from(mounted_drive_info[3]));
                     }
 
                 } else if mount_info.len() == 2 {
-                    mounts.push(String::from(mount_info[1]));
+                    mounts.push(PathBuf::from(mount_info[1]));
                 }
             }
 
@@ -147,4 +153,30 @@ pub fn identify_mounted_drives() -> Vec<String> {
     mounts
 }
 
+pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
+    // TODO find the correct uuid and return the real pathbuf
+    let mounts = identify_mounted_drives();
 
+    let all_drives = Command::new("lsblk")
+        .arg("-l")
+        .arg("-o")
+        .arg("NAME,HOTPLUG,UUID,MOUNT")
+        .output()
+        .expect("some drives");
+
+    let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
+    
+    for line in all_drives_string.lines() {
+        if line.contains(uuid) {
+            // the UUID matches, so get the path 
+            let drive_info = line.split(' ')
+                .filter(|d| !d.is_empty() )
+                .collect::<Vec<_>>();
+
+            if drive_info[2] == uuid { 
+               return Ok(PathBuf::from(drive_info[3]));
+            }
+        }
+    }
+    Err(Error::new(ErrorKind::Other, "Could not match UUID"))
+}

@@ -41,7 +41,11 @@ use crate::loggers::{
 };
 
 mod mount;
-use crate::mount::identify_mounted_drives;
+use crate::mount::{
+    identify_mounted_drives,
+    match_uuid,
+    get_uuid
+};
 
 mod background;
 
@@ -59,7 +63,6 @@ pub enum ProcType {
     Executable,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 enum Autoloop {
     Yes,
@@ -71,7 +74,6 @@ pub enum AdvancedSchedule {
     Yes,
     No
 }
-
 
 type Schedule = Vec<(String, String)>;
 
@@ -607,6 +609,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // set up task vars
     let mut file = PathBuf::new();
     let mut web_url = String::with_capacity(0);
+    let mut uuid = String::with_capacity(0);
     let mut slide_delay: u32 = 5;
     let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
@@ -766,6 +769,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 },
                 "MT_FILE" => file.push(value.as_str()),
                 "MT_URL" => web_url.push_str(value.as_str()),
+                "MT_UUID" => uuid.push_str(value.as_str()),
                 "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
                 "MT_SCHEDULE" => schedule = match value.as_str() {
                     "true" => AdvancedSchedule::Yes,
@@ -784,7 +788,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         // every ProcType requires a file, except Web
         if proc_type != ProcType::Web && !file.clone().as_path().exists() {
-        display_error_with_message("Could not find file!");    
+            // match the uuid and change the file path if necessary
+            if let Ok(mount_path) = match_uuid(&uuid) {
+                let username = whoami::username();
+                // get the new device name from the mount path
+                // TODO include checks for these unwraps
+                let new_device_name = mount_path.components().nth(2).unwrap().as_os_str().to_str().unwrap();
+                // replace the device name in the file_path "/media/{username}/device-name"   
+                if let Some(file_path_str) = file.to_str() {
+                    // TODO include checks for these unwraps
+                    file = PathBuf::from(file_path_str.replace(file.components().nth(2).unwrap().as_os_str().to_str().unwrap(), new_device_name));
+                } else {
+                    display_error_with_message("Failed to replace file path with new device name.");    
+                }
+                // set the new file name
+            } else {
+                display_error_with_message("Could not find file!");    
+            }
         }
     } 
 
