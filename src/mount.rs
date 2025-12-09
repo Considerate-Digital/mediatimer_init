@@ -1,11 +1,15 @@
 use std::{
-    error::Error,
     process::{
         Command,
         Stdio
     },
-    thread,
-    time::Duration
+    path::{
+        PathBuf
+    },
+    io::{
+        Error,
+        ErrorKind
+    }
 };
 
 use regex::Regex;
@@ -23,27 +27,10 @@ enum Usb {
     SDC2,
     SDC3,
     SDC4,
-    UNKNOWN
+    Unknown
 }
 
 impl Usb {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Usb::SDA1 => "sda1", 
-            Usb::SDA2 => "sda2", 
-            Usb::SDA3 => "sda3", 
-            Usb::SDA4 => "sda4",
-            Usb::SDB1 => "sdb1", 
-            Usb::SDB2 => "sdb2", 
-            Usb::SDB3 => "sdb3",
-            Usb::SDB4 => "sdb4",
-            Usb::SDC1 => "sdc1",
-            Usb::SDC2 => "sdc2",
-            Usb::SDC3 => "sdc3",
-            Usb::SDC4 => "sdc4",
-            Usb::UNKNOWN => ""
-        }
-    }
     fn as_device_path(&self) -> &'static str {
         match self {
             Usb::SDA1 => "/dev/sda1", 
@@ -58,13 +45,12 @@ impl Usb {
             Usb::SDC2 => "/dev/sdc2",
             Usb::SDC3 => "/dev/sdc3",
             Usb::SDC4 => "/dev/sdc4",
-            Usb::UNKNOWN => ""
+            Usb::Unknown => ""
         }
-
     }
-
 }
-pub fn identify_mounted_drives() -> Vec<String> {
+
+pub fn identify_mounted_drives() -> Vec<PathBuf> {
     let mut mounts = Vec::with_capacity(2);
     // find out if any drives mounted, otherwise default to /home/username
     let all_drives = Command::new("lsblk")
@@ -76,11 +62,11 @@ pub fn identify_mounted_drives() -> Vec<String> {
 
     let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
     
+    let re = Regex::new(r"sd[a,b,c][1-4]").unwrap();
     for line in all_drives_string.lines() {
-        let re = Regex::new(r"sd[a,b,c][1-4]").unwrap();
         if re.is_match(line) {
             let drive_info = line.split(' ')
-                .filter(|d| *d != "" )
+                .filter(|d| !d.is_empty() )
                 .collect::<Vec<_>>();
                 if drive_info[1] == "1" { 
                     
@@ -100,13 +86,13 @@ pub fn identify_mounted_drives() -> Vec<String> {
                         "sdc2" => Usb::SDC2,
                         "sdc3" => Usb::SDC3,
                         "sdc4" => Usb::SDC4,
-                        &_ => Usb::UNKNOWN
+                        &_ => Usb::Unknown
 
                     };
     
 
                 // check if device mounted
-                let udc_info = Command::new("udisksctl")
+                let mut udc_info = Command::new("udisksctl")
                     .arg("info")
                     .arg("-b")
                     .arg(drive.as_device_path())
@@ -114,23 +100,24 @@ pub fn identify_mounted_drives() -> Vec<String> {
                     .spawn()
                     .expect("Failed to get info on usb disks");
 
-                let udc_info = udc_info.stdout.expect("Failed to open udc-info stdout");
+                let pipe = udc_info.stdout.take().unwrap();
 
                 let udc_m_grep = Command::new("grep")
                     .arg("MountPoints")
-                    .stdin(Stdio::from(udc_info))
+                    .stdin(pipe)
                     .stdout(Stdio::piped())
                     .spawn()
                     .expect("Failed to grep the udisksctl output");
 
                 let udc_mounted_output = udc_m_grep.wait_with_output().expect("Failed to wait on grep");
+                let _ = udc_info.wait();
 
 
                 let udc_mounted_output = String::from_utf8_lossy(&udc_mounted_output.stdout);
                 
                 let mount_info = udc_mounted_output.split(" ")
                     .map(|x| x.trim())
-                    .filter(|d| *d != "")
+                    .filter(|d| !d.is_empty() )
                     .collect::<Vec<_>>();
 
                 // if the previous step has revealed that the partition is not mounted expect a 
@@ -148,18 +135,16 @@ pub fn identify_mounted_drives() -> Vec<String> {
 
                     let mounted_drive_info = udc_output.split(" ")
                         .map(|x| x.trim())
-                        .filter(|d| *d != "")
+                        .filter(|d| !d.is_empty() )
                         .collect::<Vec<_>>();
         
                     // this will be a vector with four parts
-                    if mounted_drive_info.len() == 4 {
-                        if mounted_drive_info[3] != "" {
-                            mounts.push(String::from(mounted_drive_info[3]));
-                        }
+                    if mounted_drive_info.len() == 4 && !mounted_drive_info[3].is_empty() {
+                        mounts.push(PathBuf::from(mounted_drive_info[3]));
                     }
 
                 } else if mount_info.len() == 2 {
-                    mounts.push(String::from(mount_info[1]));
+                    mounts.push(PathBuf::from(mount_info[1]));
                 }
             }
 
@@ -168,4 +153,28 @@ pub fn identify_mounted_drives() -> Vec<String> {
     mounts
 }
 
+pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
 
+    let all_drives = Command::new("lsblk")
+        .arg("-l")
+        .arg("-o")
+        .arg("NAME,HOTPLUG,UUID,MOUNTPOINT")
+        .output()
+        .expect("some drives");
+
+    let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
+    
+    for line in all_drives_string.lines() {
+        if line.contains(uuid) {
+            // the UUID matches, so get the path 
+            let drive_info = line.split(' ')
+                .filter(|d| !d.is_empty() )
+                .collect::<Vec<_>>();
+
+            if drive_info[2] == uuid { 
+               return Ok(PathBuf::from(drive_info[3]));
+            }
+        }
+    }
+    Err(Error::new(ErrorKind::Other, "Could not match UUID"))
+}

@@ -2,7 +2,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
     time::Duration,
-    path::{PathBuf},
+    path::{Path, PathBuf},
     env,
     error::Error,
     process,
@@ -11,7 +11,11 @@ use std::{
         Child
     },
     os::unix::process::CommandExt,
-    fs
+    fs,
+    io::{
+        BufRead, 
+        BufReader
+    },
 
 };
 use strum::Display;
@@ -28,7 +32,6 @@ use chrono::{
 };
 
 use regex::Regex;
-use whoami;
 
 mod loggers;
 use crate::loggers::{
@@ -38,12 +41,14 @@ use crate::loggers::{
 };
 
 mod mount;
-use crate::mount::identify_mounted_drives;
+use crate::mount::{
+    identify_mounted_drives,
+    match_uuid,
+};
 
 mod background;
 
 mod error;
-use crate::error::error as display_error;
 use crate::error::error_with_message as display_error_with_message;
 
 #[derive(Debug,Clone, Copy, PartialEq)]
@@ -52,10 +57,10 @@ pub enum ProcType {
     Audio,
     Image,
     Slideshow,
+    Web,
     Browser,
     Executable,
 }
-
 
 #[derive(Debug, Clone, Copy)]
 enum Autoloop {
@@ -69,9 +74,7 @@ pub enum AdvancedSchedule {
     No
 }
 
-
 type Schedule = Vec<(String, String)>;
-type Timings = Vec<Weekday>;
 
 #[derive(Display, Debug, Clone)]
 pub enum Weekday {
@@ -107,28 +110,19 @@ impl Weekday {
 struct Task {
     proc_type: ProcType,
     auto_loop: Autoloop,
-    timings: Timings,
     file: PathBuf,
-    slide_delay: u32
+    slide_delay: u32,
+    web_url: String
 }
 
 impl Task {
-    fn new(proc_type: ProcType, auto_loop: Autoloop, timings: Timings, file: PathBuf, slide_delay: u32) -> Self {
+    fn new(proc_type: ProcType, auto_loop: Autoloop, file: PathBuf, slide_delay: u32, web_url: String) -> Self {
         Task {
             proc_type,
             auto_loop,
-            timings,
             file,
-            slide_delay
-        }
-    }
-    fn background() -> Self {
-        Task {
-            proc_type: ProcType::Video,
-            auto_loop: Autoloop::Yes,
-            timings: Vec::with_capacity(0),
-            file: PathBuf::from("/"),
-            slide_delay: 5
+            slide_delay,
+            web_url
         }
     }
 }
@@ -137,49 +131,47 @@ impl Task {
 struct RunningTask {
     child: process::Child,
     background: bool,
-    task: Arc<Mutex<Task>>
 }
 
 impl RunningTask {
-    fn new(child: Child, background: bool, task: Arc<Mutex<Task>>) -> RunningTask {
+    fn new(child: Child, background: bool) -> RunningTask {
         RunningTask {
             child,
             background,
-            task
         }
     }
 }
 
 fn timing_format_correct(string_of_times: &str) -> bool {
-    let re = Regex::new(r"^(?<h>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<h2>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$").unwrap();
+    let re = Regex::new(r"^(?<start>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<end>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$").unwrap();
     if re.is_match(string_of_times) { 
-        let times: Vec<(u32, u32)> = re.captures_iter(string_of_times).map(|times| {
-            let hour_1 = times.name("h").unwrap().as_str();
-            let hour_1 = hour_1.parse::<u32>().unwrap();
-            let hour_2 = times.name("h2").unwrap().as_str();
-            let hour_2 = hour_2.parse::<u32>().unwrap();
-            (hour_1, hour_2)
-        }).collect();
-        for time_pair in times.iter() {
-            if time_pair.0 < 24 && 
-                time_pair.1 < 24 {
-                    return true;
-                } else {
-                    return false;
-            }
-        }
-        false
+        let (_, [start, end]) = re.captures(string_of_times).unwrap().extract();
+        //let hour_1 = times.name("h").unwrap().as_str();
+        let hour_1 = start.parse::<u32>().unwrap();
+        //let hour_2 = times.name("h2").unwrap().as_str();
+        let hour_2 = end.parse::<u32>().unwrap();
+        
+        // This checks if the hour is less than 24
+        // The minutes and seconds are already checked by the regex
+        hour_1 < 24 && hour_2 < 24
     } else {
         false
     }
 }
+
+
+fn url_format_correct(url: &str) -> bool {
+        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$").unwrap();
+        re.is_match(url)
+    }
+
 
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
 
 
     let mut day_schedule = Vec::new();
 
-    if &value != "" {
+    if !&value.is_empty() {
         let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
 
         for start_and_end in string_vec.iter() {
@@ -225,6 +217,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     };
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
+    let web_url = task.lock().unwrap().web_url.clone();
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
@@ -329,6 +322,25 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
+        ProcType::Web => {
+            thread::spawn(move || {
+                let child = Command::new("chromium")
+                    //.arg("--user-data-dir=/tmp/chromium/")
+                    //.arg("--disable-session-crashed-bubble")
+                    .arg("--disable-infobars")
+                    //.arg("--kiosk")
+                    .arg("--incognito")
+                    .arg("--start-fullscreen")
+                    .arg("--start-maximized")
+                    .arg(&web_url)
+                    .spawn().expect("no child");
+
+                let running_task = RunningTask::new(child, false, task_clone);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+
+        },
+
         ProcType::Browser => {
             thread::spawn(move || {
                 let child = Command::new("chromium")
@@ -370,16 +382,12 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
 
-    let task_clone = Arc::clone(&task);
-
     log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
 
-    let looper = match task.lock().unwrap().auto_loop {
-        Autoloop::Yes => Autoloop::Yes,
-        Autoloop::No => Autoloop::No
-    };
+    let looper = task.lock().unwrap().auto_loop;
     let file_binding = task.lock().unwrap().file.clone();
     let file = String::from(file_binding.to_str().unwrap());
+    let web_url= task.lock().unwrap().web_url.clone();
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
 
     match task.lock().unwrap().proc_type {
@@ -397,7 +405,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false, task_clone);
+                        let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
 
@@ -412,7 +420,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false, task_clone);
+                        let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
                 }
@@ -433,7 +441,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false, task_clone);
+                        let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
 
@@ -449,7 +457,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                             .arg(&file)
                             .spawn().expect("no child");
 
-                        let running_task = RunningTask::new(child, false, task_clone);
+                        let running_task = RunningTask::new(child, false);
                         task_list_clone.lock().unwrap().push(running_task);
                     });
                 }
@@ -463,7 +471,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg("black")
                     .arg(&file)
                     .spawn().expect("no child");
-                let running_task = RunningTask::new(child, false, task_clone);
+                let running_task = RunningTask::new(child, false);
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
@@ -477,10 +485,30 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg(&slide_delay)
                     .arg(&file)
                     .spawn().expect("no child");
-                let running_task = RunningTask::new(child, false, task_clone);
+                let running_task = RunningTask::new(child, false);
                 task_list_clone.lock().unwrap().push(running_task);
             });
         },
+        ProcType::Web => {
+            thread::spawn(move || {
+                let child = Command::new("chromium")
+                    //.arg("--user-data-dir=/tmp/chromium/")
+                    //.arg("--disable-session-crashed-bubble")
+                    .arg("--disable-infobars")
+                    //.arg("--kiosk")
+                    .arg("--incognito")
+                    .arg("--start-fullscreen")
+                    .arg("--start-maximized")
+                    .arg(&web_url)
+                    .spawn().expect("no child");
+
+                let running_task = RunningTask::new(child, false);
+                task_list_clone.lock().unwrap().push(running_task);
+            });
+
+        },
+
+
         ProcType::Browser => {
             thread::spawn(move || {
                 let child = Command::new("chromium")
@@ -494,7 +522,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .arg(&file)
                     .spawn().expect("no child");
 
-                let running_task = RunningTask::new(child, false, task_clone);
+                let running_task = RunningTask::new(child, false);
                 task_list_clone.lock().unwrap().push(running_task);
             });
 
@@ -506,7 +534,7 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
                     .process_group(0)
                     .spawn().expect("no child");
 
-                let running_task = RunningTask::new(child, false, task_clone);
+                let running_task = RunningTask::new(child, false);
                 task_list_clone.lock().unwrap().push(running_task);
             });
 
@@ -514,11 +542,11 @@ fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
     }
 
     // stop the task after launching the new task to ensure a smooh overlap
-    let _stopped_task = stop_task(task_list_clone_two.clone());
+    stop_task(task_list_clone_two.clone());
 }
 
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
-    if task_list.lock().unwrap().len() > 0 {
+    if !task_list.lock().unwrap().is_empty() {
 
         let mut task = task_list.lock().unwrap().remove(0);
 
@@ -528,11 +556,11 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
 
 
 
-        if task.background == false {
+        if !task.background {
             // clears up any sub processes: particularly needed for "executable" 
             // proctypes as anything spawned from a sub shell will likely have a different PID
             let id = task.child.id();
-            let neg_id = format!("-{}", id.to_string());
+            let neg_id = format!("-{}", id);
             let _kill_child = Command::new("kill")
                 .arg("-TERM")
                 .arg("--")
@@ -541,12 +569,7 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
                 .expect("Failed to remove child with kill command");
 
             // run background
-            if task.task.lock().unwrap().proc_type == ProcType::Audio {
-                background::run(Arc::clone(&task_list), true);
-            } else {
-                background::run(Arc::clone(&task_list), false);
-            }
-
+            background::run(Arc::clone(&task_list));
         }
 
         // wait for a second before stopping the task, to allow overlap
@@ -584,11 +607,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // set up task vars
     let mut file = PathBuf::new();
+    let mut web_url = String::with_capacity(0);
+    let mut uuid = String::with_capacity(0);
     let mut slide_delay: u32 = 5;
     let mut proc_type = ProcType::Video;
     let mut auto_loop = Autoloop::No;
     let mut schedule = AdvancedSchedule::No;
-    let mut timings: Vec<Weekday> = Vec::with_capacity(7);
     let mut monday: Weekday = Weekday::Monday(Vec::with_capacity(2));
     let mut tuesday: Weekday = Weekday::Tuesday(Vec::with_capacity(2));
     let mut wednesday: Weekday = Weekday::Wednesday(Vec::with_capacity(2));
@@ -598,57 +622,125 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut sunday: Weekday = Weekday::Sunday(Vec::with_capacity(2));
 
 
-    let mut drive_path = PathBuf::new();
+    let mut autoplay_path = PathBuf::new();
+    let mut url_path = PathBuf::new();
     if mounted_drives.len() == 1 {
-        // check to see if 'autoplay' dir exists
-        drive_path = PathBuf::from(&mounted_drives[0]);
-        drive_path.push("autoplay");
+        autoplay_path = PathBuf::from(&mounted_drives[0]);
+        autoplay_path.push("autoplay");
+        url_path = autoplay_path.clone();
+        url_path.push("url.mt");
     }
 
-    if drive_path.exists() {
-        // check if files are images or (audio/video) 
-        let files = fs::read_dir(&drive_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
-        if files.len() == 1 {
-            // use ffprobe to check file or just go for it with ffplay?
-            // ffprobe -hide_banner -show_entries stream=codec_type FILE
-            // The regex responds to the first match, which in this case is "video" for a video 
-            // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
-            let probe_text = Command::new("ffprobe")
-                .arg("-hide_banner")
-                .arg("-show_entries")
-                .arg("stream=codec_type")
-                .arg(&files[0].path())
-                .output()
-                .expect("ffprobe failed to find media");
-            let probe_string = String::from_utf8_lossy(&probe_text.stdout);
-            let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
-            let media_captures = media_re.captures(&probe_string).unwrap();
-            let media_type = media_captures.name("media").unwrap().as_str();
-
-            proc_type = match media_type {
-                "video" => ProcType::Video,
-                "audio" => ProcType::Audio,
-                &_ => ProcType::Video
-            };
-
-            // create task with video proc and autoplay it
-            file = files[0].path();
-            auto_loop = Autoloop::Yes;
-            schedule = AdvancedSchedule::No;
-
-        } else {
-            // multiple files are available so use slideshow proc
-            file = drive_path;
-            proc_type = ProcType::Slideshow;
-            schedule = AdvancedSchedule::No;
+        fn is_filename(entry: &Path, name: &str) -> bool {
+            let mut entry = entry.to_path_buf();
+            entry.set_extension("");
+            entry
+                .file_name().unwrap()
+                .to_str()
+                .is_some_and(|n| n.to_lowercase() == name)
         }
+
+        fn dir_contains_url(path: PathBuf) -> bool {
+            if path.exists() {
+                let mut url_exists = false;
+                // read the directory
+                for entry in path.read_dir().expect("read_dir call failed").flatten() {
+                    let entry_is_filename = is_filename(&entry.path(), "url"); 
+                    if entry_is_filename {
+                        // rename the entry to comply with our suffix
+                        let original_name = entry.path();
+                        let mut entry_path = entry.path();
+                        entry_path.set_file_name("url");
+                        entry_path.set_extension("mt");
+                        // rename the file
+                        if fs::rename(original_name, entry_path).is_ok() {
+                            url_exists = true;
+                        } else {
+                            //display error
+                            display_error_with_message("Failed to rename file containing URL. Please check permissions.");
+                        }
+                    }
+                }
+                url_exists
+            } else {
+                false
+            }
+        }
+
+        fn is_dirname(path: &Path, name: &str) -> bool {
+            if path.exists() {
+                if path.is_dir() {
+                    path.iter()
+                        .any(|n| n.to_ascii_lowercase() == name)
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        if dir_contains_url(autoplay_path.clone()) {
+            // read the file at url_path
+            let file = fs::File::open(&url_path).expect("Failed to open URL file");
+            let reader = BufReader::new(file);
+            let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
+            // TODO check if line contains url
+            
+            // TODO check url is valid
+            if !lines.is_empty() && url_format_correct(&lines[0]) {
+                web_url = lines[0].clone();
+                proc_type = ProcType::Web;
+                schedule = AdvancedSchedule::No;
+            } else {
+                //TODO error message
+                log_error("URL format incorrect");
+                display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
+
+            }
+            
+        } else if is_dirname(autoplay_path.as_path(), "autoplay") {
+            // check if files are images or (audio/video) 
+            let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
+            if files.len() == 1 {
+                // use ffprobe to check file or just go for it with ffplay?
+                // The regex responds to the first match, which in this case is "video" for a video 
+                // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
+                let probe_text = Command::new("ffprobe")
+                    .arg("-hide_banner")
+                    .arg("-show_entries")
+                    .arg("stream=codec_type")
+                    .arg(files[0].path())
+                    .output()
+                    .expect("ffprobe failed to find media");
+                let probe_string = String::from_utf8_lossy(&probe_text.stdout);
+                let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
+                let media_captures = media_re.captures(&probe_string).unwrap();
+                let media_type = media_captures.name("media").unwrap().as_str();
+
+                proc_type = match media_type {
+                    "video" => ProcType::Video,
+                    "audio" => ProcType::Audio,
+                    &_ => ProcType::Video
+                };
+
+                // create task with video proc and autoplay it
+                file = files[0].path();
+                auto_loop = Autoloop::Yes;
+                schedule = AdvancedSchedule::No;
+
+            } else {
+                // multiple files are available so use slideshow proc
+                file = autoplay_path;
+                proc_type = ProcType::Slideshow;
+                schedule = AdvancedSchedule::No;
+            }
 
     } else {
 
         let username = whoami::username();
         let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
 
-        if let Err(_) = dotenvy::from_path_override(env_dir_path.as_path()) {
+        if dotenvy::from_path_override(env_dir_path.as_path()).is_err() {
             eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
             log_error("Cannot find env vars at path");
             display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
@@ -663,6 +755,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         "audio" => ProcType::Audio,
                         "image" => ProcType::Image,
                         "slideshow" => ProcType::Slideshow,
+                        "web" => ProcType::Web,
                         "browser" => ProcType::Browser,
                         "executable" => ProcType::Executable,
                         &_ => ProcType::Video
@@ -674,6 +767,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     &_ => Autoloop::No
                 },
                 "MT_FILE" => file.push(value.as_str()),
+                "MT_URL" => web_url.push_str(value.as_str()),
+                "MT_UUID" => uuid.push_str(value.as_str()),
                 "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
                 "MT_SCHEDULE" => schedule = match value.as_str() {
                     "true" => AdvancedSchedule::Yes,
@@ -690,29 +785,43 @@ fn main() -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
-        if false == file.clone().as_path().exists() {
-            display_error_with_message("Could not find file!");    
+        // every ProcType requires a file, except Web
+        if proc_type != ProcType::Web && !file.clone().as_path().exists() {
+            // match the uuid and change the file path if necessary
+            if let Ok(mount_path) = match_uuid(&uuid) {
+                // get the new device name from the mount path
+                // TODO include checks for these unwraps
+                let new_device_name = mount_path.components().nth(2).unwrap().as_os_str().to_str().unwrap();
+                // replace the device name in the file_path "/media/{username}/device-name"   
+                if let Some(file_path_str) = file.to_str() {
+                    // TODO include checks for these unwraps
+                    file = PathBuf::from(file_path_str.replace(file.components().nth(2).unwrap().as_os_str().to_str().unwrap(), new_device_name));
+                } else {
+                    display_error_with_message("Failed to replace file path with new device name.");    
+                }
+                // set the new file name
+            } else {
+                display_error_with_message("Could not find file!");    
+            }
         }
     } 
 
-    timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
+    let timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
 
     let timings_clone = timings.clone();
     let proc_type_clone = proc_type;
     
 
-    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, timings, file, slide_delay)));
+    let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, file, slide_delay, web_url)));
 
     // set up scheduler
     let mut scheduler = Scheduler::new();
     if schedule == AdvancedSchedule::Yes {
         // create then start the background after the task is created
-        let _create_background = background::make(proc_type_clone);
-        if proc_type == ProcType::Audio { 
-            let _run_background = background::run(Arc::clone(&app.task_list), true);
-        } else {
-            let _run_background = background::run(Arc::clone(&app.task_list), false);
-        }
+        background::make(proc_type_clone);
+
+        background::run(Arc::clone(&app.task_list));
+
         // use the full scheduler and run the task at certain times
         for day in timings_clone.iter() {
             let day_name = match day {
@@ -739,7 +848,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
                 // function must return a date format string
                 if i.len() == 2 {
-                    (i[0], i[1], 0 as u32) 
+                    (i[0], i[1], 0_u32) 
                 } else {
                     (i[0], i[1], i[2]) 
                 }
@@ -807,8 +916,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         // run the task now
         let task_clone = Arc::clone(&task); 
         let task_list_clone = Arc::clone(&app.task_list);
-        let _task_aut = run_task(task_list_clone, task_clone);
-        loop {}
+        run_task(task_list_clone, task_clone);
+        loop {
+            std::thread::sleep(Duration::from_secs(60));
+        };
     }
 }
 
