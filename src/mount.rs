@@ -154,7 +154,6 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
 }
 
 pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
-    let mounts = identify_mounted_drives();
 
     let all_drives = Command::new("lsblk")
         .arg("-l")

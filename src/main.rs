@@ -44,7 +44,6 @@ mod mount;
 use crate::mount::{
     identify_mounted_drives,
     match_uuid,
-    get_uuid
 };
 
 mod background;
@@ -790,7 +789,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         if proc_type != ProcType::Web && !file.clone().as_path().exists() {
             // match the uuid and change the file path if necessary
             if let Ok(mount_path) = match_uuid(&uuid) {
-                let username = whoami::username();
                 // get the new device name from the mount path
                 // TODO include checks for these unwraps
                 let new_device_name = mount_path.components().nth(2).unwrap().as_os_str().to_str().unwrap();
