@@ -154,13 +154,12 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
 }
 
 pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
-    // TODO find the correct uuid and return the real pathbuf
     let mounts = identify_mounted_drives();
 
     let all_drives = Command::new("lsblk")
         .arg("-l")
         .arg("-o")
-        .arg("NAME,HOTPLUG,UUID,MOUNT")
+        .arg("NAME,HOTPLUG,UUID,MOUNTPOINT")
         .output()
         .expect("some drives");
 
