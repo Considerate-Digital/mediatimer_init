@@ -679,26 +679,27 @@ fn main() -> Result<(), Box<dyn Error>> {
                 false
             }
         }
+
+        fn dir_is_empty(path: &Path) {
+            path.read_dir().unwrap().next().is_none()
+        }
+
         if dir_contains_url(autoplay_path.clone()) {
             // read the file at url_path
             let file = fs::File::open(&url_path).expect("Failed to open URL file");
             let reader = BufReader::new(file);
             let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            // TODO check if line contains url
-            
-            // TODO check url is valid
             if !lines.is_empty() && url_format_correct(&lines[0]) {
                 web_url = lines[0].clone();
                 proc_type = ProcType::Web;
                 schedule = AdvancedSchedule::No;
             } else {
-                //TODO error message
                 log_error("URL format incorrect");
                 display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
 
             }
             
-        } else if is_dirname(autoplay_path.as_path(), "autoplay") {
+        } else if is_dirname(autoplay_path.as_path(), "autoplay") &&  !dir_is_empty(autoplay_path.as_path()) {
             // check if files are images or (audio/video) 
             let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
             if files.len() == 1 {
