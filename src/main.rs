@@ -150,7 +150,7 @@ fn timing_format_correct(string_of_times: &str) -> bool {
         let hour_1 = start.parse::<u32>().unwrap();
         //let hour_2 = times.name("h2").unwrap().as_str();
         let hour_2 = end.parse::<u32>().unwrap();
-        
+
         // This checks if the hour is less than 24
         // The minutes and seconds are already checked by the regex
         hour_1 < 24 && hour_2 < 24
@@ -161,9 +161,9 @@ fn timing_format_correct(string_of_times: &str) -> bool {
 
 
 fn url_format_correct(url: &str) -> bool {
-        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$").unwrap();
-        re.is_match(url)
-    }
+    let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$").unwrap();
+    re.is_match(url)
+}
 
 
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
@@ -591,6 +591,58 @@ impl Default for App {
     }
 }
 
+fn is_filename(entry: &Path, name: &str) -> bool {
+    let mut entry = entry.to_path_buf();
+    entry.set_extension("");
+    entry
+        .file_name().unwrap()
+        .to_str()
+        .is_some_and(|n| n.to_lowercase() == name)
+}
+
+fn dir_contains_url(path: PathBuf) -> bool {
+    if path.exists() {
+        let mut url_exists = false;
+        // read the directory
+        for entry in path.read_dir().expect("read_dir call failed").flatten() {
+            let entry_is_filename = is_filename(&entry.path(), "url"); 
+            if entry_is_filename {
+                // rename the entry to comply with our suffix
+                let original_name = entry.path();
+                let mut entry_path = entry.path();
+                entry_path.set_file_name("url");
+                entry_path.set_extension("mt");
+                // rename the file
+                if fs::rename(original_name, entry_path).is_ok() {
+                    url_exists = true;
+                } else {
+                    //display error
+                    display_error_with_message("Failed to rename file containing URL. Please check permissions.");
+                }
+            }
+        }
+        url_exists
+    } else {
+        false
+    }
+}
+
+fn is_dirname(path: &Path, name: &str) -> bool {
+    if path.exists() {
+        if path.is_dir() {
+            path.iter()
+                .any(|n| n.to_ascii_lowercase() == name)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+fn dir_is_empty(path: &Path) -> bool {
+    path.read_dir().unwrap().next().is_none()
+}
 
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -630,110 +682,59 @@ fn main() -> Result<(), Box<dyn Error>> {
         url_path.push("url.mt");
     }
 
-        fn is_filename(entry: &Path, name: &str) -> bool {
-            let mut entry = entry.to_path_buf();
-            entry.set_extension("");
-            entry
-                .file_name().unwrap()
-                .to_str()
-                .is_some_and(|n| n.to_lowercase() == name)
+
+
+    if dir_contains_url(autoplay_path.clone()) {
+        // read the file at url_path
+        let file = fs::File::open(&url_path).expect("Failed to open URL file");
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
+        if !lines.is_empty() && url_format_correct(&lines[0]) {
+            web_url = lines[0].clone();
+            proc_type = ProcType::Web;
+            schedule = AdvancedSchedule::No;
+        } else {
+            log_error("URL format incorrect");
+            display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
+
         }
 
-        fn dir_contains_url(path: PathBuf) -> bool {
-            if path.exists() {
-                let mut url_exists = false;
-                // read the directory
-                for entry in path.read_dir().expect("read_dir call failed").flatten() {
-                    let entry_is_filename = is_filename(&entry.path(), "url"); 
-                    if entry_is_filename {
-                        // rename the entry to comply with our suffix
-                        let original_name = entry.path();
-                        let mut entry_path = entry.path();
-                        entry_path.set_file_name("url");
-                        entry_path.set_extension("mt");
-                        // rename the file
-                        if fs::rename(original_name, entry_path).is_ok() {
-                            url_exists = true;
-                        } else {
-                            //display error
-                            display_error_with_message("Failed to rename file containing URL. Please check permissions.");
-                        }
-                    }
-                }
-                url_exists
-            } else {
-                false
-            }
+    } else if is_dirname(autoplay_path.as_path(), "autoplay") &&  !dir_is_empty(autoplay_path.as_path()) {
+        // check if files are images or (audio/video) 
+        let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
+        if files.len() == 1 {
+            // use ffprobe to check file or just go for it with ffplay?
+            // The regex responds to the first match, which in this case is "video" for a video 
+            // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
+            let probe_text = Command::new("ffprobe")
+                .arg("-hide_banner")
+                .arg("-show_entries")
+                .arg("stream=codec_type")
+                .arg(files[0].path())
+                .output()
+                .expect("ffprobe failed to find media");
+            let probe_string = String::from_utf8_lossy(&probe_text.stdout);
+            let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
+            let media_captures = media_re.captures(&probe_string).unwrap();
+            let media_type = media_captures.name("media").unwrap().as_str();
+
+            proc_type = match media_type {
+                "video" => ProcType::Video,
+                "audio" => ProcType::Audio,
+                &_ => ProcType::Video
+            };
+
+            // create task with video proc and autoplay it
+            file = files[0].path();
+            auto_loop = Autoloop::Yes;
+            schedule = AdvancedSchedule::No;
+
+        } else {
+            // multiple files are available so use slideshow proc
+            file = autoplay_path;
+            proc_type = ProcType::Slideshow;
+            schedule = AdvancedSchedule::No;
         }
-
-        fn is_dirname(path: &Path, name: &str) -> bool {
-            if path.exists() {
-                if path.is_dir() {
-                    path.iter()
-                        .any(|n| n.to_ascii_lowercase() == name)
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
-
-        fn dir_is_empty(path: &Path) {
-            path.read_dir().unwrap().next().is_none()
-        }
-
-        if dir_contains_url(autoplay_path.clone()) {
-            // read the file at url_path
-            let file = fs::File::open(&url_path).expect("Failed to open URL file");
-            let reader = BufReader::new(file);
-            let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            if !lines.is_empty() && url_format_correct(&lines[0]) {
-                web_url = lines[0].clone();
-                proc_type = ProcType::Web;
-                schedule = AdvancedSchedule::No;
-            } else {
-                log_error("URL format incorrect");
-                display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
-
-            }
-            
-        } else if is_dirname(autoplay_path.as_path(), "autoplay") &&  !dir_is_empty(autoplay_path.as_path()) {
-            // check if files are images or (audio/video) 
-            let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
-            if files.len() == 1 {
-                // use ffprobe to check file or just go for it with ffplay?
-                // The regex responds to the first match, which in this case is "video" for a video 
-                // and "audio" for a video. Video media types will also have an audio codec_type but this is collected as the second regex capture. 
-                let probe_text = Command::new("ffprobe")
-                    .arg("-hide_banner")
-                    .arg("-show_entries")
-                    .arg("stream=codec_type")
-                    .arg(files[0].path())
-                    .output()
-                    .expect("ffprobe failed to find media");
-                let probe_string = String::from_utf8_lossy(&probe_text.stdout);
-                let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
-                let media_captures = media_re.captures(&probe_string).unwrap();
-                let media_type = media_captures.name("media").unwrap().as_str();
-
-                proc_type = match media_type {
-                    "video" => ProcType::Video,
-                    "audio" => ProcType::Audio,
-                    &_ => ProcType::Video
-                };
-
-                // create task with video proc and autoplay it
-                file = files[0].path();
-                auto_loop = Autoloop::Yes;
-                schedule = AdvancedSchedule::No;
-
-            } else {
-                // multiple files are available so use slideshow proc
-                file = autoplay_path;
-                proc_type = ProcType::Slideshow;
-                schedule = AdvancedSchedule::No;
-            }
 
     } else {
 
@@ -810,7 +811,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let timings_clone = timings.clone();
     let proc_type_clone = proc_type;
-    
+
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(proc_type, auto_loop, file, slide_delay, web_url)));
 
@@ -938,10 +939,10 @@ mod tests {
     fn test_weekday_as_str() {
         let monday = Weekday::Monday(Vec::new());
         assert_eq!(monday.as_str(), "Monday");
-        
+
         let tuesday = Weekday::Tuesday(Vec::new());
         assert_eq!(tuesday.as_str(), "Tuesday");
-        
+
         // Test remaining weekdays similarly...
     }
 
@@ -949,7 +950,7 @@ mod tests {
     fn test_weekday_to_string() {
         let monday = Weekday::Monday(Vec::new());
         assert_eq!(monday.to_string(), "Monday");
-        
+
         let thursday = Weekday::Thursday(Vec::new());
         assert_eq!(thursday.to_string(), "Thursday");
     }
@@ -966,22 +967,22 @@ mod tests {
             7
 
         );
-        
+
         match task.proc_type {
             ProcType::Video => assert!(true),
             _ => assert!(false, "Incorrect proc_type"),
         }
-        
+
         match task.auto_loop {
             Autoloop::No => assert!(true),
             _ => assert!(false, "Incorrect auto_loop value"),
         }
-        
+
         assert_eq!(task.timings.len(), 0);
         assert_eq!(task.file, file_path);
     }
 
-    
+
 
     // Test to_weekday function
     #[test]
@@ -989,7 +990,7 @@ mod tests {
         let value = "08:00-12:00".to_string();
         let schedule = AdvancedSchedule::No;
         let result = to_weekday(value, Weekday::Monday(Vec::new()), schedule);
-        
+
         assert!(result.is_ok());
         match result.unwrap() {
             Weekday::Monday(schedule) => {
@@ -1006,7 +1007,7 @@ mod tests {
         let value = "08:00-12:00, 14:00-16:00".to_string();
         let schedule = AdvancedSchedule::No;
         let result = to_weekday(value, Weekday::Tuesday(Vec::new()), schedule);
-        
+
         assert!(result.is_ok());
         match result.unwrap() {
             Weekday::Tuesday(schedule) => {
@@ -1025,7 +1026,7 @@ mod tests {
         let value = "".to_string();
         let schedule = AdvancedSchedule::No;
         let result = to_weekday(value, Weekday::Wednesday(Vec::new()), schedule);
-        
+
         assert!(result.is_ok());
         match result.unwrap() {
             Weekday::Wednesday(schedule) => {
@@ -1038,7 +1039,7 @@ mod tests {
     // Test functionality of the RunningTask struct
     #[test]
     fn test_running_task_new() {
-        
+
         let test_task = Task::new(
             ProcType::Browser,
             Autoloop::No,
@@ -1051,18 +1052,18 @@ mod tests {
         let dummy_child = Command::new("echo").spawn().expect("Failed to create dummy process");
         let task = RunningTask::new(dummy_child, false, 
             Arc::new(Mutex::new(test_task))
-            );
-        
+        );
+
         assert_eq!(task.background, false);
         // We can't directly test the child process, but we can verify the struct was created
     }
 
     // Integration tests for task execution - these need to be carefully considered as they create actual processes
     // Using mocked commands/processes would be ideal
-    
+
     #[test]
     fn test_run_and_stop_task() {
-        
+
         let video_proc = ProcType::Video;
         let _create_background = background::make(video_proc);
 
@@ -1073,28 +1074,28 @@ mod tests {
         let script_path = dir.path().join("test_script.sh");
         fs::write(&script_path, "#!/bin/sh\nsleep 10\n").unwrap();
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
-        
+
         let task = Arc::new(Mutex::new(Task::new(
-            ProcType::Executable,
-            Autoloop::No,
-            Vec::new(),
-            script_path,
-            5
+                    ProcType::Executable,
+                    Autoloop::No,
+                    Vec::new(),
+                    script_path,
+                    5
         )));
-        
-        
+
+
         // Run the task
         run_task(Arc::clone(&task_list), Arc::clone(&task));
-        
+
         // Give it a moment to start
         thread::sleep(Duration::from_millis(500));
-        
+
         // Check task is running
         assert_eq!(task_list.lock().unwrap().len(), 1);
-        
+
         // Stop the task
         stop_task(Arc::clone(&task_list));
-        
+
         // Task list should be empty after stopping
         assert_eq!(task_list.lock().unwrap().len(), 1);
     }
@@ -1104,7 +1105,7 @@ mod tests {
     fn test_schedule_timing_parser() {
         // Test the function that parses time strings
         // We can extract the function from the main code to test it separately
-        
+
         // For example:
         fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
             let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
@@ -1114,7 +1115,7 @@ mod tests {
                 (i[0], i[1], i[2]) 
             }
         }
-        
+
         assert_eq!(get_timing_as_hms("08:30"), (8, 30, 0));
         assert_eq!(get_timing_as_hms("15:45:20"), (15, 45, 20));
     }

@@ -84,8 +84,6 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw("Please run 'mediatimer' in a terminal to setup the program."),
                 Line::raw(""),
-                Line::raw("Or manually edit the Media Timer config file at"),
-                Line::raw("/home/adaptable/.mediatimer_config/vars"),
         ];
         if !self.message.is_empty() {
             lines = vec![
@@ -96,8 +94,6 @@ impl Widget for &ErrorTerm {
                 Line::raw(""),
                 Line::raw("To reset the program run 'mediatimer' in a terminal."),
                 Line::raw(""),
-                Line::raw("Or manually edit the mediatimer config file at"),
-                Line::raw("/home/adaptable/.mediatimer_config/vars"),
             ];
         }
 
