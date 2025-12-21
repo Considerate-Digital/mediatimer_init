@@ -22,3 +22,15 @@ tempfile = "3.19.1"
 eco = []
 standard = []
 pro = []
+
+[package.metadata.deb]
+maintainer = "Alex McCartney <alex@considerate.digital>"
+copyright = "2026, Alex McCartney <alex@considerate.digital>"
+license-file = ["LICENSE.md", "0"]
+depends = "$auto"
+priority= "optional"
+assets = [
+  { source = "target/release/mediatimer_init", dest = "usr/bin/mediatimer_init", mode = "755" },
+  { source = "README.md", dest = "/usr/share/man/mediatimer_init/README", mode = "644" },
+  { source = "debian/mediatimer_init.service", dest = "/usr/lib/systemd/user/", mode = "644" }
+]

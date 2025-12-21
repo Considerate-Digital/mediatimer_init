@@ -1,0 +1,13 @@
+[Unit]
+Description=Mediatimer scheduler
+
+[Service]
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=DISPLAY=:0
+Type=oneshot
+ExecStart=foot /usr/bin/mediatimer_init
+RestartSec=5
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
