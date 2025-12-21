@@ -27,7 +27,7 @@ pro = []
 maintainer = "Alex McCartney <alex@considerate.digital>"
 copyright = "2026, Alex McCartney <alex@considerate.digital>"
 license-file = ["LICENSE.md", "0"]
-depends = "$auto"
+depends = "$auto, ffmpeg, chromium, default-jdk, feh, foot"
 priority= "optional"
 assets = [
   { source = "target/release/mediatimer_init", dest = "usr/bin/mediatimer_init", mode = "755" },
