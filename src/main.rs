@@ -103,7 +103,7 @@ impl Weekday {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq,Display, Clone)]
 enum Model {
     Eco,
     Standard,
