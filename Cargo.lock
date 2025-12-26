@@ -385,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "mediatimer_init"
-version = "0.1.5"
+version = "0.1.7"
 dependencies = [
  "chrono",
  "clokwerk",

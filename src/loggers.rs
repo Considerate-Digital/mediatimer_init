@@ -1,23 +1,33 @@
-#[allow(unused_imports)]
-use log::{info, warn, error, LevelFilter};
-
+use log::{LevelFilter};
+use std::error::Error;
 use systemd_journal_logger::JournalLog;
 
-pub fn setup_logger() {
-    JournalLog::new().unwrap().install().unwrap();
+pub fn setup_logger() -> Result<(), Box<dyn Error>> {
+    JournalLog::new()?.install()?;
     log::set_max_level(LevelFilter::Info);
+    Ok(())
 }
 
-pub fn log_info(message: &str) {
-   info!("{}", message); 
+#[macro_export] 
+macro_rules! logi {
+    ($($t:tt)*) => {{
+       info!($($t)*); 
+    }};
 }
 
-#[allow(dead_code)]
-pub fn log_warn(message: &str) {
-    warn!("{}", message);
+#[macro_export] 
+macro_rules! logw {
+    ($($t:tt)*) => {{
+       warn!($($t)*); 
+    }};
 }
 
-pub fn log_error(message: &str) {
-    error!("{}", message);
+#[macro_export] 
+macro_rules! loge {
+    ($($t:tt)*) => {{
+       error!($($t)*); 
+       eprintln!($($t)*);
+    }};
 }
+
 

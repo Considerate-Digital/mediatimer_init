@@ -1,6 +1,6 @@
 [package]
 name = "mediatimer_init"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 
 [dependencies]
@@ -24,6 +24,7 @@ copyright = "2026, Alex McCartney <alex@considerate.digital>"
 license-file = ["LICENSE.md", "0"]
 depends = "$auto, ffmpeg, chromium, default-jdk, feh, foot"
 priority= "optional"
+section = "misc"
 assets = [
   { source = "target/release/mediatimer_init", dest = "usr/bin/mediatimer_init", mode = "755" },
   { source = "README.md", dest = "/usr/share/man/mediatimer_init/README", mode = "644" },

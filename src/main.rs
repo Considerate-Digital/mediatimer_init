@@ -33,11 +33,10 @@ use chrono::{
 use regex::Regex;
 
 mod loggers;
-use crate::loggers::{
-    setup_logger,
-    log_info,
-    log_warn,
-    log_error
+use crate::{
+    logi,
+    logw,
+    loge
 };
 
 mod mount;
@@ -152,28 +151,29 @@ impl RunningTask {
     }
 }
 
-fn timing_format_correct(string_of_times: &str) -> bool {
-    let re = Regex::new(r"^(?<start>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<end>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$").unwrap();
+fn timing_format_correct(string_of_times: &str) -> Result<bool, Box<dyn Error>> {
+    let re = Regex::new(r"^(?<start>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<end>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$")?;
     if re.is_match(string_of_times) { 
-        let (_, [start, end]) = re.captures(string_of_times).unwrap().extract();
-        //let hour_1 = times.name("h").unwrap().as_str();
-        let hour_1 = start.parse::<u32>().unwrap();
-        //let hour_2 = times.name("h2").unwrap().as_str();
-        let hour_2 = end.parse::<u32>().unwrap();
-        
-        // This checks if the hour is less than 24
-        // The minutes and seconds are already checked by the regex
-        hour_1 < 24 && hour_2 < 24
-    } else {
-        false
+        if let Some(captured) = re.captures(string_of_times) {
+            let (_, [start, end]) = captured.extract();
+            let hour_1 = start.parse::<u32>()?;
+            let hour_2 = end.parse::<u32>()?;
+            
+            // This checks if the hour is less than 24
+            // The minutes and seconds are already checked by the regex
+            if hour_1 < 24 && hour_2 < 24 {
+                return Ok(true);
+            }
+        }
     }
+    Ok(false)
 }
 
 
-fn url_format_correct(url: &str) -> bool {
-        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$").unwrap();
-        re.is_match(url)
-    }
+fn url_format_correct(url: &str) -> Result<bool, Box<dyn Error>> {
+        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$")?;
+        Ok(re.is_match(url))
+}
 
 
 fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result<Weekday, Box<dyn Error>> {
@@ -215,14 +215,15 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
 
 
 
-fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) {
-    if !task_list.lock().unwrap().is_empty() {
+fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Error>> {
+    let empty_task = task_list.lock()?.is_empty();
+    if !empty_task {
 
-        let mut task = task_list.lock().unwrap().remove(0);
+        let mut task = task_list.lock()?.remove(0);
 
-        log_info(format!("Kill Task: {:?}", task.child).as_str());
+        logi!(format!("Kill Task: {:?}", task.child).as_str());
 
-        task.child.kill().expect("command could not be killed");
+        task.child.kill()?;
 
 
 
@@ -317,21 +318,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         url_path.push("url.mt");
     }
 
-        fn is_filename(entry: &Path, name: &str) -> bool {
+        fn is_filename(entry: &Path, name: &str) -> Result<bool, Box<dyn Error>> {
             let mut entry = entry.to_path_buf();
             entry.set_extension("");
-            entry
-                .file_name().unwrap()
-                .to_str()
-                .is_some_and(|n| n.to_lowercase() == name)
+            if let Some(file_name) = entry.file_name() {
+                return Ok(
+                    file_name
+                    .to_str()
+                    .is_some_and(|n| n.to_lowercase() == name)
+                );
+            } 
+            Ok(false)
         }
 
-        fn dir_contains_url(path: PathBuf) -> bool {
+        fn dir_contains_url(path: PathBuf) -> Result<bool, Box<dyn Error>> {
             if path.exists() {
                 let mut url_exists = false;
                 // read the directory
-                for entry in path.read_dir().expect("read_dir call failed").flatten() {
-                    let entry_is_filename = is_filename(&entry.path(), "url"); 
+                for entry in path.read_dir()?.flatten() {
+                    let entry_is_filename = is_filename(&entry.path(), "url")?; 
                     if entry_is_filename {
                         // rename the entry to comply with our suffix
                         let original_name = entry.path();
@@ -347,10 +352,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
-                url_exists
-            } else {
-                false
+                return Ok(url_exists);
             }
+            Ok(false)
         }
 
         fn is_dirname(path: &Path, name: &str) -> bool {
@@ -365,28 +369,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 false
             }
         }
-        if dir_contains_url(autoplay_path.clone()) {
+        if dir_contains_url(autoplay_path.clone())  {
             // read the file at url_path
             let file = fs::File::open(&url_path).expect("Failed to open URL file");
             let reader = BufReader::new(file);
             let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            // TODO check if line contains url
             
-            // TODO check url is valid
             if !lines.is_empty() && url_format_correct(&lines[0]) {
                 web_url = lines[0].clone();
                 proc_type = ProcType::Web;
                 schedule = AdvancedSchedule::No;
             } else {
-                //TODO error message
-                log_error("URL format incorrect");
-                display_error_with_message("URL incorrectly formatted. Please check the URL starts with \"https://\"");    
+                loge!("URL format incorrect");
 
             }
             
         } else if is_dirname(autoplay_path.as_path(), "autoplay") {
             // check if files are images or (audio/video) 
-            let files = fs::read_dir(&autoplay_path).unwrap().map(|i| i.unwrap()).collect::<Vec<_>>();
+            let files = fs::read_dir(&autoplay_path)?.map(|i| i?).collect::<Vec<_>>();
             if files.len() == 1 {
                 // use ffprobe to check file or just go for it with ffplay?
                 // The regex responds to the first match, which in this case is "video" for a video 
@@ -396,12 +396,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .arg("-show_entries")
                     .arg("stream=codec_type")
                     .arg(files[0].path())
-                    .output()
-                    .expect("ffprobe failed to find media");
+                    .output()?;
                 let probe_string = String::from_utf8_lossy(&probe_text.stdout);
-                let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b").unwrap();
-                let media_captures = media_re.captures(&probe_string).unwrap();
-                let media_type = media_captures.name("media").unwrap().as_str();
+                let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b")?;
+                let media_captures = media_re.captures(&probe_string)?;
+                let media_type = media_captures.name("media")?.as_str();
 
                 proc_type = match media_type {
                     "video" => ProcType::Video,
@@ -455,7 +454,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 "MT_FILE" => file.push(value.as_str()),
                 "MT_URL" => web_url.push_str(value.as_str()),
                 "MT_UUID" => uuid.push_str(value.as_str()),
-                "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>().unwrap(),
+                "MT_SLIDE_DELAY" => slide_delay = value.parse::<u32>()?,
                 "MT_SCHEDULE" => schedule = match value.as_str() {
                     "true" => AdvancedSchedule::Yes,
                     "false" => AdvancedSchedule::No,
@@ -477,11 +476,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let Ok(mount_path) = match_uuid(&uuid) {
                 // get the new device name from the mount path
                 // TODO include checks for these unwraps
-                let new_device_name = mount_path.components().nth(2).unwrap().as_os_str().to_str().unwrap();
+                let new_device_name = mount_path.components().nth(2)?.as_os_str().to_str()?;
                 // replace the device name in the file_path "/media/{username}/device-name"   
                 if let Some(file_path_str) = file.to_str() {
-                    // TODO include checks for these unwraps
-                    file = PathBuf::from(file_path_str.replace(file.components().nth(2).unwrap().as_os_str().to_str().unwrap(), new_device_name));
+                    file = PathBuf::from(file_path_str.replace(
+                            file.components()
+                            .nth(2)?
+                            .as_os_str()
+                            .to_str()?, 
+                            new_device_name));
                 } else {
                     display_error_with_message("Failed to replace file path with new device name.");    
                 }
@@ -531,7 +534,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
-                let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+                let i = value.split(":").map(|t| t.parse::<u32>()?).collect::<Vec<u32>>();
                 // function must return a date format string
                 if i.len() == 2 {
                     (i[0], i[1], 0_u32) 
@@ -554,7 +557,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let timing_day = day.as_str();
                 if day_today.to_lowercase() == timing_day.to_lowercase() {
                     let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
-                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>().unwrap()).collect::<Vec<u32>>();
+                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>()?).collect::<Vec<u32>>();
                     let year_num = date_nums[0] as i32;
                     let month_num = date_nums[1];
                     let day_num = date_nums[2];
@@ -566,13 +569,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     let start_time = Local.with_ymd_and_hms(
                         year_num, month_num, day_num, 
-                        start_hour, start_min, start_sec).unwrap();
+                        start_hour, start_min, start_sec)?;
 
                     let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
 
                     let end_time = Local.with_ymd_and_hms(
                         year_num, month_num, day_num, 
-                        end_hour, end_min, end_sec).unwrap();
+                        end_hour, end_min, end_sec)?;
 
 
                     let local_timestamp = local.timestamp(); 
