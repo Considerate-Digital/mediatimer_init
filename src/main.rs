@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = App::default();
 
     // initialise loggers
-    setup_logger();
+    let _ = setup_logger();
    
     // Preset model to "pro" version so that all features are enabled if the model details 
     // cannot be found
@@ -615,7 +615,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 scheduler.every(day_name)
                     .at(&timing.1)
                     // unused Result type in closure
-                    .run(move || { stop_task(task_list_clone_2.clone()); });
+                    .run(move || { let _ = stop_task(task_list_clone_2.clone()); });
                 }
         }
         loop {
