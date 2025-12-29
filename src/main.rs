@@ -32,12 +32,10 @@ use chrono::{
 
 use regex::Regex;
 
+use log::{info, warn, error};
+
 mod loggers;
-use crate::{
-    logi,
-    logw,
-    loge
-};
+use crate::loggers::setup_logger;
 
 mod mount;
 use crate::mount::{
@@ -185,7 +183,8 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
         let string_vec: Vec<String> = value.as_str().split(",").map(|x| x.trim().to_string()).collect(); 
 
         for start_and_end in string_vec.iter() {
-            if schedule == AdvancedSchedule::Yes && !timing_format_correct(start_and_end) {
+            let timing_format_correct = timing_format_correct(start_and_end)?;
+            if schedule == AdvancedSchedule::Yes && !timing_format_correct {
                 display_error_with_message("Schedule incorrectly formatted!");
                 process::exit(1);
             }
@@ -221,7 +220,7 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Erro
 
         let mut task = task_list.lock()?.remove(0);
 
-        logi!(format!("Kill Task: {:?}", task.child).as_str());
+        logi!("Kill Task: {:?}", task.child);
 
         task.child.kill()?;
 
@@ -246,9 +245,10 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Erro
         // wait for a second before stopping the task, to allow overlap
         let one_sec = Duration::from_millis(1000);
         thread::sleep(one_sec);
-
-        task.child.kill().expect("command could not be killed");
+        
+        task.child.kill()?;
     }
+    Ok(())
 }
 
 struct App {
@@ -284,10 +284,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             &_ => Model::Pro
        }
     } else {
-        log_warn("No Adaptable model set at /etc/adaptableos/MODEL. Default model Pro will be used.");
+        logw!("No Adaptable model set at /etc/adaptableos/MODEL. Default model Pro will be used.");
     }
     let selected_model = format!("Model selected: {}", model);
-    log_info(&selected_model);
+    logi!("{}", &selected_model);
 
     // this will mount all of the drives automatically using udisksctl
     let mounted_drives = identify_mounted_drives();
@@ -369,13 +369,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 false
             }
         }
-        if dir_contains_url(autoplay_path.clone())  {
+
+        let dir_contains_url = dir_contains_url(autoplay_path.clone())?;
+        if dir_contains_url  {
             // read the file at url_path
             let file = fs::File::open(&url_path).expect("Failed to open URL file");
             let reader = BufReader::new(file);
-            let lines: Vec<String> = reader.lines().map(|l| l.expect("no line")).filter(|l| l.contains("https")).collect::<Vec<String>>();
-            
-            if !lines.is_empty() && url_format_correct(&lines[0]) {
+            let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).filter(|l| l.contains("https")).collect::<Vec<String>>();
+            let url_format_correct = url_format_correct(&lines[0])?; 
+            if !lines.is_empty() && url_format_correct {
                 web_url = lines[0].clone();
                 proc_type = ProcType::Web;
                 schedule = AdvancedSchedule::No;
@@ -386,7 +388,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             
         } else if is_dirname(autoplay_path.as_path(), "autoplay") {
             // check if files are images or (audio/video) 
-            let files = fs::read_dir(&autoplay_path)?.map(|i| i?).collect::<Vec<_>>();
+            let files = fs::read_dir(&autoplay_path)?.map(|i| i.unwrap()).collect::<Vec<_>>();
             if files.len() == 1 {
                 // use ffprobe to check file or just go for it with ffplay?
                 // The regex responds to the first match, which in this case is "video" for a video 
@@ -399,19 +401,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .output()?;
                 let probe_string = String::from_utf8_lossy(&probe_text.stdout);
                 let media_re = Regex::new(r"\scodec_type=(?<media>\w+)\b")?;
-                let media_captures = media_re.captures(&probe_string)?;
-                let media_type = media_captures.name("media")?.as_str();
+                if let Some(media_captures) = media_re.captures(&probe_string) {
+                    if let Some(media_type) = media_captures.name("media") {
 
-                proc_type = match media_type {
-                    "video" => ProcType::Video,
-                    "audio" => ProcType::Audio,
-                    &_ => ProcType::Video
-                };
+                        proc_type = match media_type.as_str() {
+                            "video" => ProcType::Video,
+                            "audio" => ProcType::Audio,
+                            &_ => ProcType::Video
+                        };
 
-                // create task with video proc and autoplay it
-                file = files[0].path();
-                auto_loop = Autoloop::Yes;
-                schedule = AdvancedSchedule::No;
+                        // create task with video proc and autoplay it
+                        file = files[0].path();
+                        auto_loop = Autoloop::Yes;
+                        schedule = AdvancedSchedule::No;
+                    }
+                }
 
             } else {
                 // multiple files are available so use slideshow proc
@@ -534,7 +538,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             fn get_timing_as_hms(value: &str) -> (u32, u32, u32) {
-                let i = value.split(":").map(|t| t.parse::<u32>()?).collect::<Vec<u32>>();
+                let i = value.split(":").map(|t| t.parse::<u32>().unwrap()).collect::<Vec<u32>>();
                 // function must return a date format string
                 if i.len() == 2 {
                     (i[0], i[1], 0_u32) 

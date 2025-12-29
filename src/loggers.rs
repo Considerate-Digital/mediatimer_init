@@ -1,4 +1,4 @@
-use log::{LevelFilter};
+use log::{info, warn, error, LevelFilter};
 use std::error::Error;
 use systemd_journal_logger::JournalLog;
 

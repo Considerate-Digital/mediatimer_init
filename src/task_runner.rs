@@ -7,12 +7,17 @@ use std::{
     os::unix::process::CommandExt,
 
 };
-use crate::loggers::{
-    log_info,
-    log_error
-};
-
 use crate::error::error_with_message as display_error_with_message;
+use crate::{
+    logi,
+    loge,
+    logw
+};
+use log::{
+    info,
+    warn,
+    error
+};
 
 use crate::{
     RunningTask,
@@ -29,7 +34,7 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
 
-    log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
+    logi!("Run task: {:?}", task.lock().unwrap());
     
     let model = task.lock().unwrap().model.clone();
 
@@ -352,23 +357,3 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
     // stop the task after launching the new task to ensure a smooh overlap
     let _stopped_task = stop_task(task_list_clone_two.clone());
 }
-/*
-#[cfg(any(feature="standard", feature="pro"))]
-fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
-    let task_list_clone = Arc::clone(&task_list);
-    let task_list_clone_two = Arc::clone(&task_list);
-
-    log_info(format!("Run task: {:?}", task.lock().unwrap()).as_str());
-
-    let looper = task.lock().unwrap().auto_loop;
-    let file_binding = task.lock().unwrap().file.clone();
-    let file = String::from(file_binding.to_str().unwrap());
-    let web_url= task.lock().unwrap().web_url.clone();
-    let slide_delay = task.lock().unwrap().slide_delay.to_string();
-
-    
-
-    // stop the task after launching the new task to ensure a smooh overlap
-    stop_task(task_list_clone_two.clone());
-}
-*/

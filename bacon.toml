@@ -11,7 +11,7 @@ default_job = "check"
 env.CARGO_TERM_COLOR = "always"
 
 [jobs.check]
-command = ["cargo", "check", "--features=pro"]
+command = ["cargo", "check"]
 need_stdout = false
 
 [jobs.check-all]
@@ -20,7 +20,7 @@ need_stdout = false
 
 # Run clippy on the default target
 [jobs.clippy]
-command = ["cargo", "clippy", "--features=pro"]
+command = ["cargo", "clippy"]
 need_stdout = false
 
 # Run clippy on all targets
@@ -54,7 +54,7 @@ need_stdout = false
 # - a specific test: bacon test -- config::test_default_files
 # - the tests of a package: bacon test -- -- -p config
 [jobs.test]
-command = ["cargo", "test", "--features=pro"]
+command = ["cargo", "test" ]
 need_stdout = true
 
 [jobs.nextest]
