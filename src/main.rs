@@ -215,10 +215,10 @@ fn to_weekday(value: String, day: Weekday, schedule: AdvancedSchedule) -> Result
 
 
 fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Error>> {
-    let empty_task = task_list.lock()?.is_empty();
-    if !empty_task {
 
-        let mut task = task_list.lock()?.remove(0);
+    if !task_list.lock().unwrap().is_empty() {
+
+        let mut task = task_list.lock().unwrap().remove(0);
 
         logi!("Kill Task: {:?}", task.child);
 
@@ -431,7 +431,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         if dotenvy::from_path_override(env_dir_path.as_path()).is_err() {
             eprintln!("Cannot find env vars at path: {}", env_dir_path.display());
-            log_error("Cannot find env vars at path");
+            loge!("Cannot find env vars at path");
             display_error_with_message("Could not find config file, please run mediatimer to set up this program.");    
             process::exit(1)
         }
@@ -479,20 +479,29 @@ fn main() -> Result<(), Box<dyn Error>> {
             // match the uuid and change the file path if necessary
             if let Ok(mount_path) = match_uuid(&uuid) {
                 // get the new device name from the mount path
-                // TODO include checks for these unwraps
-                let new_device_name = mount_path.components().nth(2)?.as_os_str().to_str()?;
-                // replace the device name in the file_path "/media/{username}/device-name"   
-                if let Some(file_path_str) = file.to_str() {
-                    file = PathBuf::from(file_path_str.replace(
-                            file.components()
-                            .nth(2)?
-                            .as_os_str()
-                            .to_str()?, 
-                            new_device_name));
+                if let Some(new_device) = mount_path.components().nth(2) {
+                    if let Some(new_device_str) = new_device.as_os_str().to_str() {
+                        // replace the device name in the file_path "/media/{username}/device-name"   
+                        if let Some(file_path_str) = file.to_str() {
+                           if let Some(file_device) = file.components().nth(2) { 
+                               if let Some(file_device_str) = file_device.as_os_str().to_str() {
+
+                                file = PathBuf::from(file_path_str.replace(file_device_str, new_device_str));
+                               } else {
+                                display_error_with_message("Failed to replace file path with new device name.");    
+                               }
+                           } else {
+                            display_error_with_message("Failed to replace file path with new device name.");    
+                          }
+                        } else {
+                            display_error_with_message("Failed to replace file path with new device name.");    
+                        }
+                    } else {
+                        display_error_with_message("Failed to replace file path with new device name.");    
+                    }
                 } else {
                     display_error_with_message("Failed to replace file path with new device name.");    
                 }
-                // set the new file name
             } else {
                 display_error_with_message("Could not find file!");    
             }
@@ -561,7 +570,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let timing_day = day.as_str();
                 if day_today.to_lowercase() == timing_day.to_lowercase() {
                     let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S"));
-                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>()?).collect::<Vec<u32>>();
+                    let date_nums: Vec<u32> = date_string.split(":").map(|i| i.parse::<u32>()).filter_map(|x| Some(x)?.ok()).collect::<Vec<u32>>();
                     let year_num = date_nums[0] as i32;
                     let month_num = date_nums[1];
                     let day_num = date_nums[2];
@@ -571,24 +580,31 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                     let (start_hour, start_min, start_sec) = get_timing_as_hms(&timing.0);
 
-                    let start_time = Local.with_ymd_and_hms(
+                    if let Some(start_time) = Local.with_ymd_and_hms(
                         year_num, month_num, day_num, 
-                        start_hour, start_min, start_sec)?;
+                        start_hour, start_min, start_sec).single() {
 
-                    let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
+                        let (end_hour, end_min, end_sec) = get_timing_as_hms(&timing.1);
 
-                    let end_time = Local.with_ymd_and_hms(
-                        year_num, month_num, day_num, 
-                        end_hour, end_min, end_sec)?;
+                        if let Some(end_time) = Local.with_ymd_and_hms(
+                            year_num, month_num, day_num, 
+                            end_hour, end_min, end_sec).single() {
 
+                            let local_timestamp = local.timestamp(); 
+                            // if &timing.0 is less 
+                            if local_timestamp > start_time.timestamp() && local_timestamp < end_time.timestamp() {
 
-                    let local_timestamp = local.timestamp(); 
-                    // if &timing.0 is less 
-                    if local_timestamp > start_time.timestamp() && local_timestamp < end_time.timestamp() {
-
-                        let task_list_clone_3 = Arc::clone(&app.task_list);
-                        let task_clone_2 = Arc::clone(&task);
-                        run_task(task_list_clone_3.clone(), task_clone_2.clone());
+                                let task_list_clone_3 = Arc::clone(&app.task_list);
+                                let task_clone_2 = Arc::clone(&task);
+                                run_task(task_list_clone_3.clone(), task_clone_2.clone());
+                            }
+                        } else {
+                            loge!("Could not parse stop time");
+                            display_error_with_message("Could not parse stop time!");    
+                        }
+                    } else {
+                        loge!("Could not parse start time");
+                        display_error_with_message("Could not parse start time!");    
                     }
                 }
 
@@ -598,7 +614,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 scheduler.every(day_name)
                     .at(&timing.1)
-                    .run(move || stop_task(task_list_clone_2.clone()));
+                    // unused Result type in closure
+                    .run(move || { stop_task(task_list_clone_2.clone()); });
                 }
         }
         loop {
