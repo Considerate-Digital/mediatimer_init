@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     sync::{Arc, Mutex},
     thread,
     process::{
@@ -8,6 +9,7 @@ use std::{
 
 };
 use crate::error::error_with_message as display_error_with_message;
+
 use crate::{
     logi,
     loge,
@@ -30,7 +32,7 @@ use crate::{
 
 /// This function takes the task to run and launches the correct software based on the variables 
 /// set within the Task struct
-pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) {
+pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) -> Result<(), Box<dyn Error>> {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
 
@@ -355,5 +357,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
 
     }
     // stop the task after launching the new task to ensure a smooh overlap
+    logi!("Attempting to stop previous task");
     let _stopped_task = stop_task(task_list_clone_two.clone());
+    Ok(())
+
 }

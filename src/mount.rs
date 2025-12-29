@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     process::{
         Command,
         Stdio
@@ -7,9 +8,20 @@ use std::{
         PathBuf
     },
     io::{
-        Error,
+        Error as IoError,
         ErrorKind
     }
+};
+
+use crate::{
+    logi,
+    loge,
+    logw
+};
+use log::{
+    info,
+    warn,
+    error
 };
 
 use regex::Regex;
@@ -50,15 +62,15 @@ impl Usb {
     }
 }
 
-pub fn identify_mounted_drives() -> Vec<PathBuf> {
+pub fn identify_mounted_drives() -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    logi!("Identifying mounted drives");
     let mut mounts = Vec::with_capacity(2);
     // find out if any drives mounted, otherwise default to /home/username
     let all_drives = Command::new("lsblk")
         .arg("-l")
         .arg("-o")
         .arg("NAME,HOTPLUG")
-        .output()
-        .expect("some drives");
+        .output()?;
 
     let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
     
@@ -89,6 +101,8 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
                         &_ => Usb::Unknown
 
                     };
+
+                    logi!("Storage drive matched");
     
 
                 // check if device mounted
@@ -97,8 +111,7 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
                     .arg("-b")
                     .arg(drive.as_device_path())
                     .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to get info on usb disks");
+                    .spawn()?;
 
                 let pipe = udc_info.stdout.take().unwrap();
 
@@ -106,11 +119,11 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
                     .arg("MountPoints")
                     .stdin(pipe)
                     .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to grep the udisksctl output");
+                    .spawn()?;
 
                 let udc_mounted_output = udc_m_grep.wait_with_output().expect("Failed to wait on grep");
                 let _ = udc_info.wait();
+                logi!("udisksctl and grep'd output successful");
 
 
                 let udc_mounted_output = String::from_utf8_lossy(&udc_mounted_output.stdout);
@@ -128,8 +141,7 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
                         .arg("mount")
                         .arg("-b")
                         .arg(drive.as_device_path())
-                        .output()
-                        .expect("One drive to be mounted");
+                        .output()?;
 
                     let udc_output = String::from_utf8_lossy(&udc_output.stdout);
 
@@ -150,22 +162,23 @@ pub fn identify_mounted_drives() -> Vec<PathBuf> {
 
         }
     }
-    mounts
+    logi!("Returning all discovered mounts");
+    Ok(mounts)
 }
 
-pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
-
+pub fn match_uuid(uuid: &str) -> Result<PathBuf, Box<dyn Error>> {
+    logi!("Matching the storage device UUID");
     let all_drives = Command::new("lsblk")
         .arg("-l")
         .arg("-o")
         .arg("NAME,HOTPLUG,UUID,MOUNTPOINT")
-        .output()
-        .expect("some drives");
+        .output()?;
 
     let all_drives_string = String::from_utf8_lossy(&all_drives.stdout);
     
     for line in all_drives_string.lines() {
         if line.contains(uuid) {
+            logi!("UUID matched to available drive");
             // the UUID matches, so get the path 
             let drive_info = line.split(' ')
                 .filter(|d| !d.is_empty() )
@@ -173,8 +186,11 @@ pub fn match_uuid(uuid: &str) -> Result<PathBuf, Error> {
 
             if drive_info[2] == uuid { 
                return Ok(PathBuf::from(drive_info[3]));
+            } else {
+                logi!("UUID does not match drive info");
             }
         }
     }
-    Err(Error::new(ErrorKind::Other, "Could not match UUID"))
+    logw!("UUID could not be matched to existing storage UUIDs");
+    Err(Box::new(IoError::new(ErrorKind::Other, "Could not match UUID")))
 }

@@ -142,6 +142,7 @@ pub struct RunningTask {
 
 impl RunningTask {
     fn new(child: Child, background: bool) -> RunningTask {
+        logi!("Initialising running task");
         RunningTask {
             child,
             background,
@@ -150,6 +151,7 @@ impl RunningTask {
 }
 
 fn timing_format_correct(string_of_times: &str) -> Result<bool, Box<dyn Error>> {
+    logi!("Checking timing format");
     let re = Regex::new(r"^(?<start>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]-(?<end>[0-2][0-9]):[0-5][0-9]:[0-5][0-9]$")?;
     if re.is_match(string_of_times) { 
         if let Some(captured) = re.captures(string_of_times) {
@@ -162,6 +164,8 @@ fn timing_format_correct(string_of_times: &str) -> Result<bool, Box<dyn Error>> 
             if hour_1 < 24 && hour_2 < 24 {
                 return Ok(true);
             }
+        } else {
+            logw!("Timing format could not be captured in regex")
         }
     }
     Ok(false)
@@ -169,8 +173,9 @@ fn timing_format_correct(string_of_times: &str) -> Result<bool, Box<dyn Error>> 
 
 
 fn url_format_correct(url: &str) -> Result<bool, Box<dyn Error>> {
-        let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$")?;
-        Ok(re.is_match(url))
+    logi!("Checking URL format");
+    let re = Regex::new(r"^(https?://)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$")?;
+    Ok(re.is_match(url))
 }
 
 
@@ -220,7 +225,7 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Erro
 
         let mut task = task_list.lock().unwrap().remove(0);
 
-        logi!("Kill Task: {:?}", task.child);
+        logi!("Attempting to Kill Task: {:?}", task.child);
 
         task.child.kill()?;
 
@@ -229,17 +234,20 @@ fn stop_task(task_list: Arc<Mutex<Vec<RunningTask>>>) -> Result<(), Box<dyn Erro
         if !task.background {
             // clears up any sub processes: particularly needed for "executable" 
             // proctypes as anything spawned from a sub shell will likely have a different PID
+            logi!("Attempting to kill any subprocesses");
             let id = task.child.id();
             let neg_id = format!("-{}", id);
             let _kill_child = Command::new("kill")
                 .arg("-TERM")
                 .arg("--")
                 .arg(neg_id)
-                .output()
-                .expect("Failed to remove child with kill command");
-
+                .output()?;
+    
+            logi!("Killed task was not background; attempting to start background");
             // run background
-            background::run(Arc::clone(&task_list));
+            background::run(Arc::clone(&task_list))?;
+        } else {
+            logi!("Killed task was background");
         }
 
         // wait for a second before stopping the task, to allow overlap
@@ -271,7 +279,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = App::default();
 
     // initialise loggers
-    let _ = setup_logger();
+    if let Err(e) = setup_logger() {
+        loge!("Logger could not be initialised: {}", e);
+    }
+
+    logi!("Initialising");
+    logi!("Loggers initialised");
    
     // Preset model to "pro" version so that all features are enabled if the model details 
     // cannot be found
@@ -290,7 +303,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     logi!("{}", &selected_model);
 
     // this will mount all of the drives automatically using udisksctl
-    let mounted_drives = identify_mounted_drives();
+    let identified_drives = identify_mounted_drives();
+    let mut mounted_drives = Vec::new();
+    let _ = match identified_drives {
+        Ok(drives) => mounted_drives = drives,
+        Err(e) => {
+            logw!("No storage devices identified, Error: {}", e);
+        }
+    };
 
     // set up task vars
     let mut file = PathBuf::new();
@@ -327,7 +347,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .to_str()
                     .is_some_and(|n| n.to_lowercase() == name)
                 );
-            } 
+            } else {
+                logw!("File name parsing failed")
+            }
             Ok(false)
         }
 
@@ -414,18 +436,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                         file = files[0].path();
                         auto_loop = Autoloop::Yes;
                         schedule = AdvancedSchedule::No;
+                    } else {
+                        logw!("media name could not be captured in regex")
                     }
+                } else {
+                    logw!("Media codec could not be captured in regex")
                 }
-
             } else {
                 // multiple files are available so use slideshow proc
                 file = autoplay_path;
                 proc_type = ProcType::Slideshow;
                 schedule = AdvancedSchedule::No;
             }
-
     } else {
-
         let username = whoami::username();
         let env_dir_path: PathBuf =["/home/", &username, ".mediatimer_config/vars"].iter().collect();
 
@@ -478,6 +501,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         if proc_type != ProcType::Web && !file.clone().as_path().exists() {
             // match the uuid and change the file path if necessary
             if let Ok(mount_path) = match_uuid(&uuid) {
+
+                let failure_message = "Failed to replace file path with new device name";
                 // get the new device name from the mount path
                 if let Some(new_device) = mount_path.components().nth(2) {
                     if let Some(new_device_str) = new_device.as_os_str().to_str() {
@@ -488,22 +513,28 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 file = PathBuf::from(file_path_str.replace(file_device_str, new_device_str));
                                } else {
-                                display_error_with_message("Failed to replace file path with new device name.");    
+                                   loge!("{}", failure_message);
+                                   display_error_with_message(failure_message);    
                                }
                            } else {
-                            display_error_with_message("Failed to replace file path with new device name.");    
+                               loge!("{}", failure_message);
+                            display_error_with_message(failure_message);    
                           }
                         } else {
-                            display_error_with_message("Failed to replace file path with new device name.");    
+                           loge!("{}", failure_message);
+                            display_error_with_message(failure_message);    
                         }
                     } else {
-                        display_error_with_message("Failed to replace file path with new device name.");    
+                       loge!("{}", failure_message);
+                        display_error_with_message(failure_message);    
                     }
                 } else {
-                    display_error_with_message("Failed to replace file path with new device name.");    
+                   loge!("{}", failure_message);
+                    display_error_with_message(failure_message);    
                 }
             } else {
-                display_error_with_message("Could not find file!");    
+               loge!("Could not match UUID and identify mount path");
+               display_error_with_message("Could not match storage device UUID and identify mount path.");    
             }
         }
     } 
@@ -511,8 +542,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let timings = vec![monday, tuesday, wednesday, thursday, friday, saturday, sunday]; 
 
     let timings_clone = timings.clone();
-    let proc_type_clone = proc_type;
-    
 
     let task: Arc<Mutex<Task>> = Arc::new(Mutex::new(Task::new(model, proc_type, auto_loop, file, slide_delay, web_url)));
 
@@ -520,9 +549,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut scheduler = Scheduler::new();
     if schedule == AdvancedSchedule::Yes {
         // create then start the background after the task is created
-        background::make(proc_type_clone);
+        if let Err(e) = background::make() {
+            loge!("Failed to make background: {}", e);
+        }
 
-        background::run(Arc::clone(&app.task_list));
+        if let Err(e) = background::run(Arc::clone(&app.task_list)) {
+            loge!("Failed to run background: {}", e);
+        }
 
         // use the full scheduler and run the task at certain times
         for day in timings_clone.iter() {
@@ -596,7 +629,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 let task_list_clone_3 = Arc::clone(&app.task_list);
                                 let task_clone_2 = Arc::clone(&task);
-                                run_task(task_list_clone_3.clone(), task_clone_2.clone());
+                                if let Err(e) = run_task(task_list_clone_3.clone(), task_clone_2.clone()) {
+                                    loge!("Failed to run task: {}", e);
+                                    display_error_with_message("Failed to run task!");    
+                                }
                             }
                         } else {
                             loge!("Could not parse stop time");
@@ -610,12 +646,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 scheduler.every(day_name)
                     .at(&timing.0)
-                    .run(move || run_task(task_list_clone.clone(), task_clone.clone()));
+                    .run(move || { 
+                        if let Err(e) = run_task(task_list_clone.clone(), task_clone.clone()) {
+                            loge!("Failed to run task:{}", e);
+                            display_error_with_message("Failed to run task!");    
+                        }
+                    });
 
                 scheduler.every(day_name)
                     .at(&timing.1)
                     // unused Result type in closure
-                    .run(move || { let _ = stop_task(task_list_clone_2.clone()); });
+                    .run(move || { 
+                        if let Err(e) = stop_task(task_list_clone_2.clone()) {
+                            loge!("Failed to stop task:{}", e);
+                            display_error_with_message("Failed to stop task!"); 
+                        }
+                     });
                 }
         }
         loop {
@@ -626,7 +672,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // run the task now
         let task_clone = Arc::clone(&task); 
         let task_list_clone = Arc::clone(&app.task_list);
-        run_task(task_list_clone, task_clone);
+        if let Err(e) = run_task(task_list_clone, task_clone) {
+
+            loge!("Failed to run task:{}", e);
+            display_error_with_message("Failed to run task!");    
+        }
         loop {
             std::thread::sleep(Duration::from_secs(60));
         };
@@ -774,7 +824,7 @@ mod tests {
     fn test_run_and_stop_task() {
         
         let video_proc = ProcType::Video;
-        let _create_background = background::make(video_proc);
+        let create_background = background::make(video_proc);
 
         let task_list = Arc::new(Mutex::new(Vec::new()));
 
