@@ -271,7 +271,59 @@ impl Default for App {
     }
 }
 
+fn is_filename(entry: &Path, name: &str) -> Result<bool, Box<dyn Error>> {
+    let mut entry = entry.to_path_buf();
+    entry.set_extension("");
+    if let Some(file_name) = entry.file_name() {
+        return Ok(
+            file_name
+            .to_str()
+            .is_some_and(|n| n.to_lowercase() == name)
+        );
+    } else {
+        logw!("File name parsing failed")
+    }
+    Ok(false)
+}
 
+fn dir_contains_url(path: PathBuf) -> Result<bool, Box<dyn Error>> {
+    if path.exists() {
+        let mut url_exists = false;
+        // read the directory
+        for entry in path.read_dir()?.flatten() {
+            let entry_is_filename = is_filename(&entry.path(), "url")?; 
+            if entry_is_filename {
+                // rename the entry to comply with our suffix
+                let original_name = entry.path();
+                let mut entry_path = entry.path();
+                entry_path.set_file_name("url");
+                entry_path.set_extension("mt");
+                // rename the file
+                if fs::rename(original_name, entry_path).is_ok() {
+                    url_exists = true;
+                } else {
+                    //display error
+                    display_error_with_message("Failed to rename file containing URL. Please check permissions.");
+                }
+            }
+        }
+        return Ok(url_exists);
+    }
+    Ok(false)
+}
+
+fn is_dirname(path: &Path, name: &str) -> bool {
+    if path.exists() {
+        if path.is_dir() {
+            path.iter()
+                .any(|n| n.to_ascii_lowercase() == name)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
 
@@ -338,59 +390,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         url_path.push("url.mt");
     }
 
-        fn is_filename(entry: &Path, name: &str) -> Result<bool, Box<dyn Error>> {
-            let mut entry = entry.to_path_buf();
-            entry.set_extension("");
-            if let Some(file_name) = entry.file_name() {
-                return Ok(
-                    file_name
-                    .to_str()
-                    .is_some_and(|n| n.to_lowercase() == name)
-                );
-            } else {
-                logw!("File name parsing failed")
-            }
-            Ok(false)
-        }
-
-        fn dir_contains_url(path: PathBuf) -> Result<bool, Box<dyn Error>> {
-            if path.exists() {
-                let mut url_exists = false;
-                // read the directory
-                for entry in path.read_dir()?.flatten() {
-                    let entry_is_filename = is_filename(&entry.path(), "url")?; 
-                    if entry_is_filename {
-                        // rename the entry to comply with our suffix
-                        let original_name = entry.path();
-                        let mut entry_path = entry.path();
-                        entry_path.set_file_name("url");
-                        entry_path.set_extension("mt");
-                        // rename the file
-                        if fs::rename(original_name, entry_path).is_ok() {
-                            url_exists = true;
-                        } else {
-                            //display error
-                            display_error_with_message("Failed to rename file containing URL. Please check permissions.");
-                        }
-                    }
-                }
-                return Ok(url_exists);
-            }
-            Ok(false)
-        }
-
-        fn is_dirname(path: &Path, name: &str) -> bool {
-            if path.exists() {
-                if path.is_dir() {
-                    path.iter()
-                        .any(|n| n.to_ascii_lowercase() == name)
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
+        
 
         let dir_contains_url = dir_contains_url(autoplay_path.clone())?;
         if dir_contains_url  {
