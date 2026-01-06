@@ -33,7 +33,7 @@ pub fn error_with_message(message: &str) {
     let mut terminal = ratatui::init();
     let _error_widget = ErrorTerm::new(message).run(&mut terminal);
     ratatui::restore();
-    process::exit(1);
+    panic!("Error: {}", &message);
 }
 
 #[derive(Default)]

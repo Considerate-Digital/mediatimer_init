@@ -26,6 +26,9 @@ use log::{
 
 use regex::Regex;
 
+use strum::Display;
+
+#[derive(Display)]
 enum Usb {
     SDA1,
     SDA2,
@@ -102,7 +105,7 @@ pub fn identify_mounted_drives() -> Result<Vec<PathBuf>, Box<dyn Error>> {
 
                     };
 
-                    logi!("Storage drive matched");
+                    logi!("Storage drive {} matched", &drive);
     
 
                 // check if device mounted
@@ -123,7 +126,7 @@ pub fn identify_mounted_drives() -> Result<Vec<PathBuf>, Box<dyn Error>> {
 
                 let udc_mounted_output = udc_m_grep.wait_with_output().expect("Failed to wait on grep");
                 let _ = udc_info.wait();
-                logi!("udisksctl and grep'd output successful");
+                logi!("udisksctl and grep searched output successful");
 
 
                 let udc_mounted_output = String::from_utf8_lossy(&udc_mounted_output.stdout);
