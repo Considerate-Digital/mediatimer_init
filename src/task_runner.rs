@@ -29,9 +29,46 @@ use crate::{
     stop_task
 };
 
+use chrono::{
+    Local,
+    DateTime
+};
+
+
+
+fn get_seek_seconds(start_time: &str) -> Result<String, Box<dyn Error>> {
+    let local = Local::now();
+    let now_timestamp = local.timestamp();
+
+    let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S:%z"));
+
+    let date_nums: Vec<&str> = date_string.split(":").collect::<Vec<&str>>();
+    let year_num = date_nums[0];
+    let month_num = date_nums[1];
+    let day_num = date_nums[2];
+    let _hour_num = date_nums[3];
+    let _min_num = date_nums[4];
+    let _sec_num = date_nums[5];
+    let timezone = date_nums[6];
+    println!("{}:{}:{}:{} {}", year_num, month_num, day_num, start_time, timezone);
+    let formatted_date = format!("{}:{}:{}:{} {}", year_num, month_num, day_num, start_time, timezone);
+    let start_dt = DateTime::parse_from_str(&formatted_date, "%Y:%m:%d:%H:%M:%S %z")?;
+
+    let start_timestamp = start_dt.timestamp();
+    println!("{}", start_timestamp);
+    println!("{}", now_timestamp);
+
+    if now_timestamp > start_timestamp {
+        let time_diff = (now_timestamp - start_timestamp).to_string();
+        Ok(time_diff)
+    } else {
+        Ok(String::from("0"))
+    }
+}
+
 /// This function takes the task to run and launches the correct software based on the variables 
 /// set within the Task struct
-pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>) -> Result<(), Box<dyn Error>> {
+pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>, start_time: &str) -> Result<(), Box<dyn Error>> {
     let task_list_clone = Arc::clone(&task_list);
     let task_list_clone_two = Arc::clone(&task_list);
 
@@ -45,6 +82,12 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
     let file = String::from(file_binding.to_str().unwrap());
     let web_url = task.lock().unwrap().web_url.clone();
     let slide_delay = task.lock().unwrap().slide_delay.to_string();
+
+    // get seek seconds
+    let mut seek_seconds: String = String::new();
+    if start_time != "" {
+        seek_seconds = get_seek_seconds(start_time)?;
+    }
 
     if model == Model::Eco {
         match task.lock().unwrap().proc_type {
@@ -60,6 +103,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -76,6 +121,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("error")
                                 .arg("-an")
                                 .arg("-fs")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -97,6 +144,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 //.arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -113,6 +162,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("error")
                                 //.arg("-fs")
                                 //.arg("-nodisp")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -214,6 +265,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -229,6 +282,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("-loglevel")
                                 .arg("error")
                                 .arg("-fs")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -250,6 +305,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 //.arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -266,6 +323,8 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
                                 .arg("error")
                                 //.arg("-fs")
                                 //.arg("-nodisp")
+                                .arg("-ss")
+                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -361,3 +420,29 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>)
     Ok(())
 
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{
+        Local,
+        TimeDelta
+    };
+
+    // Test the seek second fn
+    #[test]
+    fn test_seek_seconds() {
+        // create start time from now, plus 30 seconds
+        let date_string = Local::now().checked_add_signed(TimeDelta::new(30, 0).unwrap()).unwrap();
+        let start_time = format!("{}", date_string.format("%H:%M:%S"));
+        let seek_seconds = get_seek_seconds(&start_time).unwrap();
+        assert_eq!(seek_seconds, String::from("0"));
+
+        // create start time from now, minus 30 seconds
+        let date_string = Local::now().checked_add_signed(TimeDelta::new(-30, 0).unwrap()).unwrap();
+        let start_time = format!("{}", date_string.format("%H:%M:%S"));
+        let seek_seconds = get_seek_seconds(&start_time).unwrap();
+        assert_eq!(seek_seconds, String::from("30"));
+    }
+}
+

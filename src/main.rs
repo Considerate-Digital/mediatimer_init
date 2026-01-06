@@ -26,8 +26,8 @@ use clokwerk::{
 };
 
 use chrono::{
-    TimeZone,
-    Local
+    Local,
+    TimeZone
 };
 
 use regex::Regex;
@@ -610,6 +610,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // iterates through each timing for the day
             for timing in timing_vec.iter() {
+                let timing_clone = timing.clone();
                 let task_clone = Arc::clone(&task);
                 let task_list_clone = Arc::clone(&app.task_list);
                 let task_list_clone_2 = Arc::clone(&app.task_list);
@@ -648,7 +649,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                                 let task_list_clone_3 = Arc::clone(&app.task_list);
                                 let task_clone_2 = Arc::clone(&task);
-                                if let Err(e) = run_task(task_list_clone_3.clone(), task_clone_2.clone()) {
+                                if let Err(e) = run_task(task_list_clone_3.clone(), task_clone_2.clone(), &timing_clone.0) {
                                     loge!("Failed to run task: {}", e);
                                     display_error_with_message("Failed to run task!");    
                                 }
@@ -666,7 +667,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 scheduler.every(day_name)
                     .at(&timing.0)
                     .run(move || { 
-                        if let Err(e) = run_task(task_list_clone.clone(), task_clone.clone()) {
+                        if let Err(e) = run_task(task_list_clone.clone(), task_clone.clone(), &timing_clone.0) {
                             loge!("Failed to run task:{}", e);
                             display_error_with_message("Failed to run task!");    
                         }
@@ -691,7 +692,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // run the task now
         let task_clone = Arc::clone(&task); 
         let task_list_clone = Arc::clone(&app.task_list);
-        if let Err(e) = run_task(task_list_clone, task_clone) {
+        if let Err(e) = run_task(task_list_clone, task_clone, "") {
 
             loge!("Failed to run task:{}", e);
             display_error_with_message("Failed to run task!");    
@@ -738,12 +739,12 @@ mod tests {
     fn test_task_new() {
         let file_path = PathBuf::from("/tmp/test.mp4");
         let task = Task::new(
+            Model::Pro,
             ProcType::Video, 
             Autoloop::No, 
-            Vec::new(), 
             file_path.clone(),
-            7
-
+            7,
+            String::new()
         );
 
         match task.proc_type {
@@ -756,7 +757,6 @@ mod tests {
             _ => assert!(false, "Incorrect auto_loop value"),
         }
 
-        assert_eq!(task.timings.len(), 0);
         assert_eq!(task.file, file_path);
     }
 
@@ -819,18 +819,17 @@ mod tests {
     fn test_running_task_new() {
 
         let test_task = Task::new(
+            Model::Pro,
             ProcType::Browser,
             Autoloop::No,
-            Vec::with_capacity(0),
             PathBuf::from("/"),
-            5
+            5,
+            String::new()
         );
 
 
         let dummy_child = Command::new("echo").spawn().expect("Failed to create dummy process");
-        let task = RunningTask::new(dummy_child, false, 
-            Arc::new(Mutex::new(test_task))
-        );
+        let task = RunningTask::new(dummy_child, false);
 
         assert_eq!(task.background, false);
         // We can't directly test the child process, but we can verify the struct was created
@@ -843,7 +842,7 @@ mod tests {
     fn test_run_and_stop_task() {
 
         let video_proc = ProcType::Video;
-        let create_background = background::make(video_proc);
+        let create_background = background::make();
 
         let task_list = Arc::new(Mutex::new(Vec::new()));
 
@@ -854,16 +853,17 @@ mod tests {
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755)).unwrap();
 
         let task = Arc::new(Mutex::new(Task::new(
+                    Model::Pro,
                     ProcType::Executable,
                     Autoloop::No,
-                    Vec::new(),
                     script_path,
-                    5
+                    5,
+                    String::new()
         )));
 
 
         // Run the task
-        run_task(Arc::clone(&task_list), Arc::clone(&task));
+        run_task(Arc::clone(&task_list), Arc::clone(&task), "");
 
         // Give it a moment to start
         thread::sleep(Duration::from_millis(500));
