@@ -8,7 +8,6 @@ use std::{
     os::unix::process::CommandExt,
 
 };
-use crate::error::error_with_message as display_error_with_message;
 
 use crate::{
     logi,
