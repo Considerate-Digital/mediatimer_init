@@ -50,16 +50,14 @@ fn get_seek_seconds(start_time: &str) -> Result<String, Box<dyn Error>> {
     let _min_num = date_nums[4];
     let _sec_num = date_nums[5];
     let timezone = date_nums[6];
-    println!("{}:{}:{}:{} {}", year_num, month_num, day_num, start_time, timezone);
     let formatted_date = format!("{}:{}:{}:{} {}", year_num, month_num, day_num, start_time, timezone);
     let start_dt = DateTime::parse_from_str(&formatted_date, "%Y:%m:%d:%H:%M:%S %z")?;
 
     let start_timestamp = start_dt.timestamp();
-    println!("{}", start_timestamp);
-    println!("{}", now_timestamp);
 
     if now_timestamp > start_timestamp {
         let time_diff = (now_timestamp - start_timestamp).to_string();
+        logi!("Time Difference: {}", time_diff);
         Ok(time_diff)
     } else {
         Ok(String::from("0"))
@@ -103,8 +101,6 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>,
                                 .arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
-                                .arg("-ss")
-                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -144,8 +140,6 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>,
                                 //.arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
-                                .arg("-ss")
-                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -265,8 +259,6 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>,
                                 .arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
-                                .arg("-ss")
-                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
@@ -305,8 +297,6 @@ pub fn run_task(task_list: Arc<Mutex<Vec<RunningTask>>>, task: Arc<Mutex<Task>>,
                                 //.arg("-fs")
                                 .arg("-loop")
                                 .arg("-1")
-                                .arg("-ss")
-                                .arg(seek_seconds)
                                 .arg(&file)
                                 .spawn().expect("no child");
 
