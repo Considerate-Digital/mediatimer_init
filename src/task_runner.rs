@@ -38,7 +38,7 @@ use chrono::{
 
 fn get_seek_seconds(start_time: &str) -> Result<String, Box<dyn Error>> {
     let local = Local::now();
-    let now_timestamp = local.timestamp();
+    let now_timestamp = local.timestamp_millis();
 
     let date_string = format!("{}", local.format("%Y:%m:%d:%H:%M:%S:%z"));
 
@@ -53,10 +53,11 @@ fn get_seek_seconds(start_time: &str) -> Result<String, Box<dyn Error>> {
     let formatted_date = format!("{}:{}:{}:{} {}", year_num, month_num, day_num, start_time, timezone);
     let start_dt = DateTime::parse_from_str(&formatted_date, "%Y:%m:%d:%H:%M:%S %z")?;
 
-    let start_timestamp = start_dt.timestamp();
+    let start_timestamp = start_dt.timestamp_millis();
 
     if now_timestamp > start_timestamp {
-        let time_diff = (now_timestamp - start_timestamp).to_string();
+        let mut time_diff = (now_timestamp - start_timestamp).to_string();
+        time_diff.push_str("ms");
         logi!("Time Difference: {}", time_diff);
         Ok(time_diff)
     } else {
